@@ -9,6 +9,7 @@ import { errorHandler, notFound } from './middleware/errorHandler.js';
 import institutionRoutes from './routes/institutionRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
 import ruleRoutes from './routes/ruleRoutes.js';
+import scrutinyRoutes from './routes/scrutinyRoutes.js';
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/institutions', institutionRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/rules', ruleRoutes);
+app.use('/api/scrutiny', scrutinyRoutes);
 
 // Catch-all 404 and global error handling
 app.use(notFound);
