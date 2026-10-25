@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routers.forensics import router as forensics_router
 from .routers.facility_forensics import router as facility_router
+from .routers.typography import router as typography_router
 
 logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
@@ -34,6 +35,7 @@ app.add_middleware(
 # Mount Routers
 app.include_router(forensics_router)
 app.include_router(facility_router)
+app.include_router(typography_router)
 
 
 @app.get("/health", tags=["Health"])
