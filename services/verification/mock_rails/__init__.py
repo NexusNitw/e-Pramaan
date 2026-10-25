@@ -1,0 +1,1 @@
+"""Mock external authority rails."""
