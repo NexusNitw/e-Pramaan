@@ -1,7 +1,19 @@
-import React from 'react';
-import { ShieldCheck, FileText, LayoutDashboard, Cpu, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, FileText, LayoutDashboard, Cpu, CheckCircle2, AlertCircle } from 'lucide-react';
+import { checkSystemHealth } from '../../config/api';
 
 export default function Navbar({ activePortal, setActivePortal }) {
+  const [isGatewayOnline, setIsGatewayOnline] = useState(false);
+
+  useEffect(() => {
+    checkSystemHealth()
+      .then((data) => {
+        if (data && data.status === 'ONLINE') {
+          setIsGatewayOnline(true);
+        }
+      })
+      .catch(() => setIsGatewayOnline(false));
+  }, []);
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -30,16 +42,23 @@ export default function Navbar({ activePortal, setActivePortal }) {
           <div className="hidden lg:flex items-center space-x-2 text-xs font-mono bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800">
             <span className="flex items-center space-x-1 text-slate-400">
               <Cpu className="w-3.5 h-3.5 text-blue-400" />
-              <span>Rails:</span>
+              <span>Gateway:</span>
             </span>
-            <span className="flex items-center space-x-1 text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Gateway:5000</span>
+            {isGatewayOnline ? (
+              <span className="flex items-center space-x-1 text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Live Connected</span>
+              </span>
+            ) : (
+              <span className="flex items-center space-x-1 text-amber-400/90">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                <span>Offline (Mock Fallback)</span>
+              </span>
+            )}
+            <span className="text-slate-600">•</span>
+            <span className={isGatewayOnline ? 'text-emerald-400' : 'text-slate-400'}>
+              AI Trust Engine: {isGatewayOnline ? 'Active' : 'Standby'}
             </span>
-            <span className="text-slate-600">•</span>
-            <span className="text-emerald-400">OCR:8002</span>
-            <span className="text-slate-600">•</span>
-            <span className="text-emerald-400">Forensics:8001</span>
           </div>
 
           {/* Dual Portal Switcher Tabs */}

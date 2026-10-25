@@ -15,9 +15,9 @@ const config = {
   jwtSecret: process.env.JWT_SECRET || 'epranam_default_dev_secret',
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
   services: {
-    forensics: process.env.FORENSICS_SERVICE_URL || 'http://localhost:8001',
-    ocr: process.env.OCR_SERVICE_URL || 'http://localhost:8002',
-    verification: process.env.VERIFICATION_SERVICE_URL || 'http://localhost:8003',
+    forensics: process.env.FORENSICS_SERVICE_URL || process.env.PYTHON_SERVICES_URL || 'http://localhost:8000',
+    ocr: process.env.OCR_SERVICE_URL || process.env.PYTHON_SERVICES_URL || 'http://localhost:8000',
+    verification: process.env.VERIFICATION_SERVICE_URL || process.env.PYTHON_SERVICES_URL || 'http://localhost:8000',
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',

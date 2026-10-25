@@ -1,10 +1,12 @@
 import app from './app.js';
 import config from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
+import { seedDatabaseIfEmpty } from './config/seedDb.js';
 
 const startServer = async () => {
   // Connect to MongoDB Atlas
   await connectDB();
+  await seedDatabaseIfEmpty();
 
   const server = app.listen(config.port, () => {
     console.log(`=======================================================`);

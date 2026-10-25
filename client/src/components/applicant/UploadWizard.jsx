@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   FileCheck2,
 } from 'lucide-react';
+import { uploadDocumentFile, createApplicationDossier, runScrutinyPipeline } from '../../config/api';
 
 const DOCUMENT_CATEGORIES = [
   { id: 'fire_noc', label: 'Fire Safety NOC', required: true, icon: FileText, desc: 'Issued by State Fire & Rescue Services' },
@@ -57,56 +58,82 @@ export default function UploadWizard({ onSubmissionComplete }) {
   };
 
   const [cloudinaryUrls, setCloudinaryUrls] = useState([]);
+  const [createdApplicationRecord, setCreatedApplicationRecord] = useState(null);
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
-    const urls = [];
+    const generatedId = `AICTE-2026-${formData.category.slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`;
+    setTrackingId(generatedId);
 
     try {
-      // Stream each uploaded document to backend Cloudinary route
+      // 1. Create Application in MongoDB Atlas Gateway
+      let createdApp = null;
+      try {
+        const appRes = await createApplicationDossier({
+          applicationNumber: generatedId,
+          aictePermanentId: formData.aictePermanentId,
+          institutionName: formData.institutionName,
+          category: formData.category,
+          requestedIntake: Number(formData.requestedIntake) || 360,
+          totalStudentEnrolled: Number(formData.totalStudentEnrolled) || 1200,
+          academicYear: formData.academicYear || '2026-2027',
+        });
+        createdApp = appRes.data;
+        setCreatedApplicationRecord(createdApp);
+      } catch (appErr) {
+        console.warn('[UploadWizard] Offline fallback for application creation:', appErr.message);
+      }
+
+      // 2. Stream documents to Cloudinary & register in MongoDB
+      const appId = createdApp?._id;
+      const instId = createdApp?.institution?._id || createdApp?.institution;
+
       const uploadPromises = Object.entries(uploadedFiles).map(async ([categoryId, item]) => {
         if (!item.file) return null;
-        const uploadData = new FormData();
-        uploadData.append('file', item.file);
-        uploadData.append('documentType', categoryId.toUpperCase());
 
         try {
-          const res = await fetch('http://localhost:5000/api/documents/upload', {
-            method: 'POST',
-            body: uploadData,
-          });
-          if (res.ok) {
-            const result = await res.json();
-            return {
-              category: categoryId,
-              fileName: item.name,
-              storageUrl: result.data?.storageUrl,
-              publicId: result.data?.publicId,
-              fileHash: result.data?.fileHashSha256,
-            };
-          }
+          const result = await uploadDocumentFile(item.file, categoryId, appId, instId);
+          return {
+            category: categoryId,
+            fileName: item.name,
+            storageUrl: result.data?.storageUrl,
+            publicId: result.data?.publicId,
+            fileHash: result.data?.fileHashSha256,
+          };
         } catch (uploadErr) {
-          console.warn(`[Cloudinary Dispatch] Service fallback: ${uploadErr.message}`);
+          console.warn(`[Cloudinary Dispatch] Fallback for ${item.name}:`, uploadErr.message);
+          return {
+            category: categoryId,
+            fileName: item.name,
+            storageUrl: `https://res.cloudinary.com/aicte-epranam/raw/upload/${item.name}`,
+          };
         }
-        return {
-          category: categoryId,
-          fileName: item.name,
-          storageUrl: `https://res.cloudinary.com/aicte-epranam/raw/upload/${item.name}`,
-        };
       });
 
       const results = await Promise.all(uploadPromises);
       const successful = results.filter(Boolean);
       setCloudinaryUrls(successful);
 
-      const generatedId = `AICTE-2026-${formData.category.slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`;
-      setTrackingId(generatedId);
+      // 3. Trigger Automated Multi-Service AI Scrutiny Pipeline
+      if (appId) {
+        try {
+          const scrutinyRes = await runScrutinyPipeline(appId);
+          if (scrutinyRes.data) {
+            setCreatedApplicationRecord((prev) => ({
+              ...prev,
+              triageStatus: scrutinyRes.data.triageStatus,
+              compositeRiskScore: scrutinyRes.data.compositeRiskScore,
+            }));
+          }
+        } catch (scrutinyErr) {
+          console.warn('[UploadWizard] Microservice pipeline offline fallback:', scrutinyErr.message);
+        }
+      }
+
       setIsSubmitting(false);
       setCurrentStep(4);
     } catch (err) {
       console.error('Final dispatch error:', err);
-      const generatedId = `AICTE-2026-${formData.category.slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`;
-      setTrackingId(generatedId);
       setIsSubmitting(false);
       setCurrentStep(4);
     }
@@ -442,7 +469,7 @@ export default function UploadWizard({ onSubmissionComplete }) {
 
           <div className="pt-4 flex justify-center space-x-4">
             <button
-              onClick={() => onSubmissionComplete(trackingId)}
+              onClick={() => onSubmissionComplete(trackingId, createdApplicationRecord)}
               className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-md shadow-indigo-500/30"
             >
               Inspect Dossier in Scrutiny Console

@@ -1,14 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from './components/layout/Navbar';
 import UploadWizard from './components/applicant/UploadWizard';
 import ScrutinyConsole from './components/officer/ScrutinyConsole';
 import SplitScreenViewer from './components/officer/SplitScreenViewer';
 import { mockApplications } from './mockData';
+import { fetchApplications } from './config/api';
 
 export default function App() {
   const [activePortal, setActivePortal] = useState('officer'); // 'applicant' | 'officer'
   const [applications, setApplications] = useState(mockApplications);
   const [selectedApplication, setSelectedApplication] = useState(null);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+
+  const loadApplications = useCallback(async () => {
+    try {
+      const response = await fetchApplications();
+      if (response && response.data && response.data.length > 0) {
+        setApplications(response.data);
+        setIsLiveConnected(true);
+      }
+    } catch (err) {
+      console.info('[AICTE App] Backend offline or using seeded fallback:', err.message);
+      setIsLiveConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadApplications();
+  }, [loadApplications]);
 
   const handleSelectApplication = (app) => {
     setSelectedApplication(app);
@@ -18,10 +37,14 @@ export default function App() {
     setSelectedApplication(null);
   };
 
-  const handleSubmissionComplete = (newTrackingId) => {
-    // Switch to officer scrutiny portal and focus on newly created app or first in queue
+  const handleSubmissionComplete = async (newTrackingId, createdApp) => {
+    await loadApplications();
     setActivePortal('officer');
-    setSelectedApplication(applications[0]);
+    if (createdApp) {
+      setSelectedApplication(createdApp);
+    } else {
+      setSelectedApplication(applications[0]);
+    }
   };
 
   return (
