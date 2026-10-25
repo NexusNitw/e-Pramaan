@@ -1,22 +1,38 @@
 import datetime
 import logging
 import os
+import sys
+from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Member 1 Routers: Document Forensics, Facility Geotag, & Typography
-from services.forensics.routers.forensics import router as forensics_router
-from services.forensics.routers.facility_forensics import router as facility_router
-from services.forensics.routers.typography import router as typography_router
+# Ensure both current directory and parent directory are on sys.path for Render deployment
+_current_dir = Path(__file__).resolve().parent
+_parent_dir = _current_dir.parent
 
-# Member 2 Routers: OCR, Classification, & Pre-Scrutiny Ingestion QA
-from services.ocr.routers.classify import router as classify_router
-from services.ocr.routers.extraction import router as extraction_router
-from services.ocr.routers.pre_scrutiny import router as pre_scrutiny_router
+if str(_parent_dir) not in sys.path:
+    sys.path.insert(0, str(_parent_dir))
+if str(_current_dir) not in sys.path:
+    sys.path.insert(0, str(_current_dir))
 
-# Member 5 Router: PKI Digital Signatures, QR Payload, & External Trust Rails
-from services.verification.routers.verify import router as verify_router
+# Support running either from workspace root (services.xyz) or inside services directory (xyz)
+try:
+    from services.forensics.routers.forensics import router as forensics_router
+    from services.forensics.routers.facility_forensics import router as facility_router
+    from services.forensics.routers.typography import router as typography_router
+    from services.ocr.routers.classify import router as classify_router
+    from services.ocr.routers.extraction import router as extraction_router
+    from services.ocr.routers.pre_scrutiny import router as pre_scrutiny_router
+    from services.verification.routers.verify import router as verify_router
+except ModuleNotFoundError:
+    from forensics.routers.forensics import router as forensics_router
+    from forensics.routers.facility_forensics import router as facility_router
+    from forensics.routers.typography import router as typography_router
+    from ocr.routers.classify import router as classify_router
+    from ocr.routers.extraction import router as extraction_router
+    from ocr.routers.pre_scrutiny import router as pre_scrutiny_router
+    from verification.routers.verify import router as verify_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,7 +88,7 @@ async def root_index():
             "ocr_classify": "/api/ocr/classify",
             "ocr_extract": "/api/ocr/extract",
             "ocr_pre_scrutiny": "/api/ocr/pre-scrutiny/inspect",
-            "trust_verify": "/api/trust/verify-rails",
+            "trust_verify": "/api/verify/all",
         },
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
@@ -100,7 +116,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
     uvicorn.run(
-        "services.main:app",
+        app,
         host=host,
         port=port,
         reload=False,

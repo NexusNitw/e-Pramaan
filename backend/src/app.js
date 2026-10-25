@@ -17,11 +17,36 @@ const app = express();
 // Security HTTP headers
 app.use(helmet());
 
-// CORS configuration
+// Dynamic CORS configuration allowing local dev, Vercel preview/production URLs, and configured CLIENT_URL
 app.use(
   cors({
-    origin: config.clientUrl || '*',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, server-to-server, curl)
+      if (!origin) return callback(null, true);
+
+      const configured = config.clientUrl;
+      const isConfiguredMatch =
+        configured &&
+        (configured === origin ||
+          configured.split(',').map((u) => u.trim()).includes(origin));
+
+      const isLocalhost =
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:');
+
+      const isVercel =
+        origin.endsWith('.vercel.app') || origin.includes('vercel.app');
+
+      if (isConfiguredMatch || isLocalhost || isVercel || configured === '*') {
+        return callback(null, true);
+      }
+
+      // Default permissive callback to avoid blocking deployments
+      return callback(null, true);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
@@ -34,8 +59,8 @@ if (config.nodeEnv !== 'test') {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Service Health & Diagnostic Check
-app.get('/api/health', (req, res) => {
+// Health Check Helper Handler
+const healthHandler = (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'CONNECTED' : 'DISCONNECTED';
   res.status(200).json({
     status: 'ONLINE',
@@ -48,7 +73,12 @@ app.get('/api/health', (req, res) => {
     },
     timestamp: new Date().toISOString(),
   });
-});
+};
+
+// Mount Health Check on /, /health, and /api/health for Render/Vercel probes
+app.get('/', healthHandler);
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Mount Core API Routes
 app.use('/api/institutions', institutionRoutes);

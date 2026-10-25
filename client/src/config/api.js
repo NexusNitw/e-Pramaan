@@ -2,7 +2,7 @@
  * Centralized API configuration and service calls for AICTE e-Pramaan.
  * Seamlessly handles local development and production deployments (Vercel + Render).
  */
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 /**
  * Fetch all regulatory application dossiers from MongoDB Atlas.
@@ -84,6 +84,21 @@ export async function checkSystemHealth() {
   const res = await fetch(`${API_BASE_URL}/api/health`);
   if (!res.ok) {
     throw new Error(`Health check failed: ${res.statusText}`);
+  }
+  return await res.json();
+}
+
+/**
+ * Apply officer override or decision remark to dossier in MongoDB Atlas.
+ */
+export async function submitOfficerRemark(applicationId, payload) {
+  const res = await fetch(`${API_BASE_URL}/api/applications/${applicationId}/remarks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to log remark: ${res.status} ${res.statusText}`);
   }
   return await res.json();
 }

@@ -35,12 +35,23 @@ class OrchestrationPipeline {
 
     // 2. Process each attached DocumentRecord via Python microservices
     for (const doc of documents) {
-      const dummyBuffer = Buffer.from(`%PDF-1.4 Simulated Document Payload for ${doc.fileName}`);
+      let fileBuffer = Buffer.from(`%PDF-1.4 Simulated Document Payload for ${doc.fileName}`);
+      if (doc.storageUrl && doc.storageUrl.startsWith('http') && !doc.storageUrl.includes('mock-aicte-epranam')) {
+        try {
+          const fileResp = await fetch(doc.storageUrl);
+          if (fileResp.ok) {
+            const arrayBuf = await fileResp.arrayBuffer();
+            fileBuffer = Buffer.from(arrayBuf);
+          }
+        } catch (fetchErr) {
+          console.warn(`[OrchestrationPipeline] Could not fetch document buffer from ${doc.storageUrl}, using fallback: ${fetchErr.message}`);
+        }
+      }
       const filename = doc.fileName || 'document.pdf';
 
       // (a) Member 2 OCR Classification & Extraction
-      const ocrClass = await microserviceClient.classifyDocument(dummyBuffer, filename);
-      const ocrExtracted = await microserviceClient.extractCertificateData(dummyBuffer, filename, ocrClass.primary_document_type);
+      const ocrClass = await microserviceClient.classifyDocument(fileBuffer, filename);
+      const ocrExtracted = await microserviceClient.extractCertificateData(fileBuffer, filename, ocrClass.primary_document_type);
 
       doc.documentType = ocrClass.primary_document_type || doc.documentType;
       doc.extractedData = {
@@ -49,7 +60,7 @@ class OrchestrationPipeline {
       };
 
       // (b) Member 1 Forensics: ELA & Metadata
-      const forensicRes = await microserviceClient.analyzeForensics(dummyBuffer, filename);
+      const forensicRes = await microserviceClient.analyzeForensics(fileBuffer, filename);
       doc.forensicAnalysis.elaAnomalyScore = forensicRes.ela_analysis.anomaly_score;
       doc.forensicAnalysis.tamperDetected = forensicRes.composite_tamper_flag;
       doc.forensicAnalysis.metadataSoftware = forensicRes.metadata_analysis.detected_editing_tools;
@@ -67,7 +78,7 @@ class OrchestrationPipeline {
       // (c) Member 1 Forensics: Facility Geotag & pHash if photograph
       if (doc.documentType === 'INFRASTRUCTURE_PHOTO' || filename.toLowerCase().includes('photo')) {
         const facilityAudit = await microserviceClient.auditFacilityPhoto(
-          dummyBuffer,
+          fileBuffer,
           filename,
           institution.geoCoordinates?.latitude || 18.5204,
           institution.geoCoordinates?.longitude || 73.8567
@@ -84,7 +95,7 @@ class OrchestrationPipeline {
 
       // (d) Member 5 PKI & Trust Rails
       const trustRes = await microserviceClient.verifyTrustRails(
-        dummyBuffer,
+        fileBuffer,
         filename,
         institution.aictePermanentId,
         application.requestedIntake

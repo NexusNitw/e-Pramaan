@@ -23,10 +23,14 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
 
   const filteredApps = applications.filter((app) => {
     const matchesStatus = filterStatus === 'ALL' || app.triageStatus === filterStatus;
+    const instName = app.institution?.name || (typeof app.institution === 'string' ? app.institution : '');
+    const instId = app.institution?.aictePermanentId || '';
+    const appNum = app.applicationNumber || '';
+
     const matchesSearch =
-      app.institution.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.applicationNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.institution.aictePermanentId.includes(searchQuery);
+      instName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      appNum.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      instId.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
@@ -161,23 +165,23 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
                   >
                     <td className="px-6 py-4">
                       <div className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                        {app.institution.name}
+                        {app.institution?.name || 'Institution Dossier'}
                       </div>
                       <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center space-x-2">
-                        <span>{app.applicationNumber}</span>
+                        <span>{app.applicationNumber || 'N/A'}</span>
                         <span>•</span>
-                        <span>ID: {app.institution.aictePermanentId}</span>
+                        <span>ID: {app.institution?.aictePermanentId || 'N/A'}</span>
                         <span>•</span>
-                        <span>{app.institution.state}</span>
+                        <span>{app.institution?.state || app.institution?.address?.state || 'India'}</span>
                       </div>
                     </td>
 
                     <td className="px-6 py-4">
                       <span className="text-slate-300 font-medium">
-                        {app.category.replace(/_/g, ' ')}
+                        {(app.category || 'REGULATORY_APPLICATION').replace(/_/g, ' ')}
                       </span>
                       <span className="block text-[11px] text-slate-400 font-mono">
-                        Intake: {app.requestedIntake} seats
+                        Intake: {app.requestedIntake || 0} seats
                       </span>
                     </td>
 
@@ -209,11 +213,11 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
                             className={`h-full rounded-full ${
                               isRed ? 'bg-red-500' : isYellow ? 'bg-amber-400' : 'bg-emerald-400'
                             }`}
-                            style={{ width: `${app.compositeRiskScore}%` }}
+                            style={{ width: `${Math.min(100, Math.max(0, app.compositeRiskScore || 0))}%` }}
                           ></div>
                         </div>
                         <span className="font-mono font-bold text-slate-200">
-                          {app.compositeRiskScore.toFixed(1)}/100
+                          {(app.compositeRiskScore ?? 0).toFixed(1)}/100
                         </span>
                       </div>
                     </td>
