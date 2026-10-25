@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .routers.classify import router as classify_router
+from .routers.extraction import router as extraction_router
 
 logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
@@ -32,6 +33,7 @@ app.add_middleware(
 
 # Mount Routers
 app.include_router(classify_router)
+app.include_router(extraction_router)
 
 
 @app.get("/health", tags=["Health"])
