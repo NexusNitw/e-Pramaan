@@ -8,6 +8,7 @@ import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 import institutionRoutes from './routes/institutionRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
+import ruleRoutes from './routes/ruleRoutes.js';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.get('/api/health', (req, res) => {
 // Mount Core API Routes
 app.use('/api/institutions', institutionRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/rules', ruleRoutes);
 
 // Catch-all 404 and global error handling
 app.use(notFound);
