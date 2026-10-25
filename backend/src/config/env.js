@@ -19,6 +19,11 @@ const config = {
     ocr: process.env.OCR_SERVICE_URL || 'http://localhost:8002',
     verification: process.env.VERIFICATION_SERVICE_URL || 'http://localhost:8003',
   },
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+    apiKey: process.env.CLOUDINARY_API_KEY || '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+  },
 };
 
 export default config;
