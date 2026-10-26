@@ -43,13 +43,25 @@ export async function createApplicationDossier(payload) {
   return await res.json();
 }
 
+const CATEGORY_DOC_TYPE_MAP = {
+  fire_noc: 'FIRE_SAFETY_NOC',
+  building_plan: 'BUILDING_PLAN_APPROVAL',
+  affiliation_letter: 'UNIVERSITY_AFFILIATION_LETTER',
+  faculty_roster: 'FACULTY_MASTER_ROSTER',
+  infra_photo: 'INFRASTRUCTURE_PHOTO',
+};
+
 /**
  * Upload a document to Cloudinary via backend multipart endpoint.
  */
 export async function uploadDocumentFile(file, categoryId, applicationId, institutionId) {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('documentType', categoryId.toUpperCase());
+  const normalizedType =
+    CATEGORY_DOC_TYPE_MAP[categoryId?.toLowerCase()] ||
+    categoryId?.toUpperCase() ||
+    'OTHER';
+  formData.append('documentType', normalizedType);
   if (applicationId) formData.append('applicationId', applicationId);
   if (institutionId) formData.append('institutionId', institutionId);
 

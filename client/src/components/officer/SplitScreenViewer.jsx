@@ -16,11 +16,13 @@ import {
   Send,
   Eye,
   Sliders,
+  ExternalLink,
 } from 'lucide-react';
 import { submitOfficerRemark } from '../../config/api';
 
 export default function SplitScreenViewer({ application, onBack }) {
   const [activeTab, setActiveTab] = useState('forensics'); // 'data', 'forensics', 'pki', 'aph', 'action'
+  const [viewerMode, setViewerMode] = useState('pdf'); // 'pdf' or 'simulation'
   const [zoomLevel, setZoomLevel] = useState(100);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
   const [selectedDocIndex, setSelectedDocIndex] = useState(0);
@@ -111,135 +113,190 @@ export default function SplitScreenViewer({ application, onBack }) {
         {/* LEFT PANE: Document Visual Canvas / PDF Viewer (7 Cols) */}
         <div className="lg:col-span-7 bg-slate-900/60 p-4 flex flex-col border-r border-slate-800 overflow-hidden">
           {/* Canvas Controls */}
-          <div className="flex items-center justify-between mb-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between mb-3 gap-2 text-xs">
             <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setZoomLevel((prev) => Math.max(70, prev - 15))}
-                className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                title="Zoom Out"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <span className="font-mono text-slate-400">{zoomLevel}%</span>
-              <button
-                onClick={() => setZoomLevel((prev) => Math.min(160, prev + 15))}
-                className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                title="Zoom In"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
+              {/* View Mode Switcher */}
+              {currentDoc?.storageUrl && (
+                <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 mr-2">
+                  <button
+                    onClick={() => setViewerMode('pdf')}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                      viewerMode === 'pdf'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Original PDF
+                  </button>
+                  <button
+                    onClick={() => setViewerMode('simulation')}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                      viewerMode === 'simulation'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    AI Scrutiny Sheet
+                  </button>
+                </div>
+              )}
+
+              {viewerMode === 'simulation' && (
+                <>
+                  <button
+                    onClick={() => setZoomLevel((prev) => Math.max(70, prev - 15))}
+                    className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <span className="font-mono text-slate-400">{zoomLevel}%</span>
+                  <button
+                    onClick={() => setZoomLevel((prev) => Math.min(160, prev + 15))}
+                    className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
 
             <div className="flex items-center space-x-3">
-              <label className="flex items-center space-x-2 cursor-pointer text-slate-300 font-medium">
-                <input
-                  type="checkbox"
-                  checked={showBoundingBoxes}
-                  onChange={(e) => setShowBoundingBoxes(e.target.checked)}
-                  className="rounded bg-slate-900 border-slate-700 text-blue-600 focus:ring-0"
-                />
-                <span className="flex items-center space-x-1">
-                  <Layers className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Highlight Flagged Bounding Boxes</span>
-                </span>
-              </label>
+              {currentDoc?.storageUrl && (
+                <a
+                  href={currentDoc.storageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 font-medium transition-all"
+                  title="Open PDF directly in browser"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Full PDF</span>
+                </a>
+              )}
+
+              {viewerMode === 'simulation' && (
+                <label className="flex items-center space-x-2 cursor-pointer text-slate-300 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={showBoundingBoxes}
+                    onChange={(e) => setShowBoundingBoxes(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-700 text-blue-600 focus:ring-0"
+                  />
+                  <span className="flex items-center space-x-1">
+                    <Layers className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Highlight Flagged Bounding Boxes</span>
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
-          {/* Interactive Document Simulation Sheet */}
-          <div className="flex-1 bg-slate-950/80 rounded-xl border border-slate-800 overflow-auto p-6 flex justify-center items-start shadow-inner">
-            <div
-              className="bg-white text-slate-900 rounded shadow-2xl p-8 relative transition-transform duration-200 select-none"
-              style={{
-                width: '595px',
-                minHeight: '842px',
-                transform: `scale(${zoomLevel / 100})`,
-                transformOrigin: 'top center',
-              }}
-            >
-              {/* Document Header */}
-              <div className="border-b-2 border-slate-800 pb-4 text-center">
-                <p className="text-[10px] tracking-widest uppercase font-bold text-slate-500">
-                  Government of India / State Higher Education Council
-                </p>
-                <h4 className="text-base font-extrabold uppercase tracking-tight text-slate-900 mt-1">
-                  {(currentDoc?.documentType || 'REGULATORY_DOCUMENT').replace(/_/g, ' ')}
-                </h4>
-                <p className="text-[10px] text-slate-600 mt-0.5 font-mono">
-                  Certificate Ref: {currentDoc?.extractedData?.documentNumber || 'AICTE/REG/2026/0091'}
-                </p>
-              </div>
+          {/* Document Content View: PDF Iframe or Simulation Sheet */}
+          {viewerMode === 'pdf' && currentDoc?.storageUrl ? (
+            <div className="flex-1 w-full bg-slate-950/80 rounded-xl border border-slate-800 overflow-hidden relative shadow-inner flex flex-col">
+              <iframe
+                src={`${currentDoc.storageUrl}#toolbar=1&navpanes=0`}
+                title={currentDoc.fileName || 'Uploaded Dossier Document'}
+                className="w-full flex-1 border-0 rounded-xl bg-slate-900"
+              />
+            </div>
+          ) : (
+            <div className="flex-1 bg-slate-950/80 rounded-xl border border-slate-800 overflow-auto p-6 flex justify-center items-start shadow-inner">
+              <div
+                className="bg-white text-slate-900 rounded shadow-2xl p-8 relative transition-transform duration-200 select-none"
+                style={{
+                  width: '595px',
+                  minHeight: '842px',
+                  transform: `scale(${zoomLevel / 100})`,
+                  transformOrigin: 'top center',
+                }}
+              >
+                {/* Document Header */}
+                <div className="border-b-2 border-slate-800 pb-4 text-center">
+                  <p className="text-[10px] tracking-widest uppercase font-bold text-slate-500">
+                    Government of India / State Higher Education Council
+                  </p>
+                  <h4 className="text-base font-extrabold uppercase tracking-tight text-slate-900 mt-1">
+                    {(currentDoc?.documentType || 'REGULATORY_DOCUMENT').replace(/_/g, ' ')}
+                  </h4>
+                  <p className="text-[10px] text-slate-600 mt-0.5 font-mono">
+                    Certificate Ref: {currentDoc?.extractedData?.documentNumber || 'AICTE/REG/2026/0091'}
+                  </p>
+                </div>
 
-              {/* Document Body Text */}
-              <div className="mt-6 space-y-4 text-xs leading-relaxed text-slate-700 font-serif">
-                <p>
-                  This is to certify that an official regulatory inspection was executed for the institution{' '}
-                  <strong className="text-slate-950 font-sans">{application?.institution?.name || 'Institution Campus'}</strong> (AICTE Permanent
-                  ID: <span className="font-mono">{application?.institution?.aictePermanentId || '1-PENDING'}</span>), located in the district of{' '}
-                  {application?.institution?.district || 'District'}, {application?.institution?.state || 'State'}.
-                </p>
+                {/* Document Body Text */}
+                <div className="mt-6 space-y-4 text-xs leading-relaxed text-slate-700 font-serif">
+                  <p>
+                    This is to certify that an official regulatory inspection was executed for the institution{' '}
+                    <strong className="text-slate-950 font-sans">{application?.institution?.name || 'Institution Campus'}</strong> (AICTE Permanent
+                    ID: <span className="font-mono">{application?.institution?.aictePermanentId || '1-PENDING'}</span>), located in the district of{' '}
+                    {application?.institution?.district || 'District'}, {application?.institution?.state || 'State'}.
+                  </p>
 
-                <p>
-                  Under the statutory powers conferred by the State University Act and AICTE Approval Process Handbook
-                  (APH) Norms, the institution is evaluated for compliance covering structural fire safety, adequate
-                  instructional floor area, and sanctioned academic capacity.
-                </p>
+                  <p>
+                    Under the statutory powers conferred by the State University Act and AICTE Approval Process Handbook
+                    (APH) Norms, the institution is evaluated for compliance covering structural fire safety, adequate
+                    instructional floor area, and sanctioned academic capacity.
+                  </p>
 
-                {/* Simulated Approved Intake or NOC Table */}
-                <div className="border border-slate-300 rounded p-3 my-4 bg-slate-50 relative font-sans">
-                  <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                    <span>Program Intake Verification Schedule</span>
-                    <span className="text-[10px] font-mono text-slate-500">AY 2026-2027</span>
-                  </div>
-
-                  <div className="flex justify-between py-1 border-b border-slate-200 text-xs">
-                    <span>Undergraduate Engineering & Technology</span>
-                    <span className="font-bold text-slate-900">
-                      {currentDoc.extractedData?.sanctionedIntake || application.requestedIntake} Seats
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between py-1 text-xs">
-                    <span>Valid Operational Floor Area</span>
-                    <span className="font-bold text-slate-900">
-                      {currentDoc.extractedData?.builtUpAreaSqm || 12400} sq.m
-                    </span>
-                  </div>
-
-                  {/* Tampered Bounding Box Overlay if Red/Flagged */}
-                  {showBoundingBoxes && hasFlaggedRegions && (
-                    <div className="absolute inset-0 border-2 border-red-500 bg-red-500/10 rounded flex items-center justify-center pointer-events-none animate-pulse">
-                      <div className="bg-red-600 text-white text-[10px] font-sans font-bold px-2 py-0.5 rounded shadow">
-                        ⚠️ TAMPERED REGION DETECTED (ELA Anomaly: 84.2/100)
-                      </div>
+                  {/* Simulated Approved Intake or NOC Table */}
+                  <div className="border border-slate-300 rounded p-3 my-4 bg-slate-50 relative font-sans">
+                    <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                      <span>Program Intake Verification Schedule</span>
+                      <span className="text-[10px] font-mono text-slate-500">AY 2026-2027</span>
                     </div>
-                  )}
+
+                    <div className="flex justify-between py-1 border-b border-slate-200 text-xs">
+                      <span>Undergraduate Engineering & Technology</span>
+                      <span className="font-bold text-slate-900">
+                        {currentDoc.extractedData?.sanctionedIntake || application.requestedIntake} Seats
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between py-1 text-xs">
+                      <span>Valid Operational Floor Area</span>
+                      <span className="font-bold text-slate-900">
+                        {currentDoc.extractedData?.builtUpAreaSqm || 12400} sq.m
+                      </span>
+                    </div>
+
+                    {/* Tampered Bounding Box Overlay if Red/Flagged */}
+                    {showBoundingBoxes && hasFlaggedRegions && (
+                      <div className="absolute inset-0 border-2 border-red-500 bg-red-500/10 rounded flex items-center justify-center pointer-events-none animate-pulse">
+                        <div className="bg-red-600 text-white text-[10px] font-sans font-bold px-2 py-0.5 rounded shadow">
+                          ⚠️ TAMPERED REGION DETECTED (ELA Anomaly: 84.2/100)
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <p>
+                    Issued under the official seal and digital signature of the competent authority on this date of review.
+                  </p>
                 </div>
 
-                <p>
-                  Issued under the official seal and digital signature of the competent authority on this date of review.
-                </p>
-              </div>
-
-              {/* Document Signatures and QR Code */}
-              <div className="mt-16 pt-6 border-t border-slate-200 flex items-end justify-between font-sans">
-                <div className="text-left">
-                  <div className="w-16 h-16 border border-slate-300 rounded bg-slate-100 flex items-center justify-center p-1">
-                    <QrCode className="w-14 h-14 text-slate-800" />
+                {/* Document Signatures and QR Code */}
+                <div className="mt-16 pt-6 border-t border-slate-200 flex items-end justify-between font-sans">
+                  <div className="text-left">
+                    <div className="w-16 h-16 border border-slate-300 rounded bg-slate-100 flex items-center justify-center p-1">
+                      <QrCode className="w-14 h-14 text-slate-800" />
+                    </div>
+                    <span className="text-[9px] text-slate-500 font-mono mt-1 block">X.509 PKI QR Code</span>
                   </div>
-                  <span className="text-[9px] text-slate-500 font-mono mt-1 block">X.509 PKI QR Code</span>
-                </div>
 
-                <div className="text-right">
-                  <div className="text-blue-900 font-script font-bold text-sm">
-                    {currentDoc.verificationRails?.pkiSignerName || 'Competent Signing Authority'}
+                  <div className="text-right">
+                    <div className="text-blue-900 font-script font-bold text-sm">
+                      {currentDoc.verificationRails?.pkiSignerName || 'Competent Signing Authority'}
+                    </div>
+                    <span className="text-[10px] text-slate-600 block">Digitally Signed & Certified</span>
+                    <span className="text-[9px] text-emerald-700 font-mono block">SHA-256 Validated</span>
                   </div>
-                  <span className="text-[10px] text-slate-600 block">Digitally Signed & Certified</span>
-                  <span className="text-[9px] text-emerald-700 font-mono block">SHA-256 Validated</span>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* RIGHT PANE: Multi-Tab Inspection Console (5 Cols) */}
