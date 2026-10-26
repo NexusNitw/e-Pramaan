@@ -90,7 +90,16 @@ async def verify_all_trust_rails(
         qr_res = qr_validator.decode_and_verify(content, file.filename, document_text)
 
         # 3. DigiLocker Registry Check
-        digilocker_res = digilocker_rail.query_document("MH-2026-NOC-091", "FIRE_SAFETY_NOC", file.filename)
+        query_doc_id = qr_res.parsed_attributes.get("id") or qr_res.parsed_attributes.get("doc") or qr_res.parsed_attributes.get("ref")
+        if not query_doc_id and document_text:
+            import re
+            m = re.search(r"(?:certificate|ref|reference|noc)[\s\w\.\:\-]*?((?=[A-Z0-9\/\-_]*\d)[A-Z0-9\/\-_]{4,35})", document_text, re.I)
+            if m:
+                query_doc_id = m.group(1).strip()
+        if not query_doc_id:
+            query_doc_id = "MH-2026-NOC-091"
+
+        digilocker_res = digilocker_rail.query_document(query_doc_id, "FIRE_SAFETY_NOC", file.filename)
 
         # 4. University Affiliation Master Check
         univ_res = univ_rail.query_affiliation(aicte_id, requested_intake, file.filename)

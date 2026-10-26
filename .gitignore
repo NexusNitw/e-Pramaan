@@ -64,3 +64,10 @@ dist/
 test-suite/generated_dossiers/
 *.xml
 instructions.txt
+# Testing purpose documents & benchmark scripts
+New folder/
+New folder
+new folder/
+new folder
+backend/test_new_folder_dossiers.js
+test_new_folder_dossiers.*

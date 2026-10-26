@@ -67,7 +67,7 @@ class ErrorLevelAnalysisEngine:
         amplified = ImageEnhance.Brightness(diff).enhance(effective_scale)
 
         # 6. Detect localized high-contrast outlier clusters with OpenCV contours
-        outlier_threshold = max(mean_error + (2.5 * std_error), 20.0)
+        outlier_threshold = max(mean_error + (4.0 * std_error), 45.0)
         outlier_mask = np.any(diff_arr > outlier_threshold, axis=2).astype(np.uint8) * 255
 
         # Morphological dilation to connect adjacent anomalous pixels into coherent clusters
@@ -80,18 +80,18 @@ class ErrorLevelAnalysisEngine:
         outlier_count = int(np.sum(outlier_mask > 0))
         high_contrast_ratio = float(outlier_count / max(total_pixels, 1))
 
-        # Find significant localized anomaly clusters (not uniform noise)
+        # Find significant localized anomaly clusters (not uniform noise or standard text glyphs)
         anomalous_clusters = []
         for c in contours:
             area = cv2.contourArea(c)
-            if 60 < area < (total_pixels * 0.15):
+            if 150 < area < (total_pixels * 0.10):
                 x, y, w, h = cv2.boundingRect(c)
                 anomalous_clusters.append({"x": x, "y": y, "w": w, "h": h, "area": area})
 
-        cluster_density_boost = min(len(anomalous_clusters) * 4.5, 30.0) if len(anomalous_clusters) > 0 else 0.0
+        cluster_density_boost = min(len(anomalous_clusters) * 4.0, 30.0) if len(anomalous_clusters) > 0 else 0.0
 
         # Annotate top outlier clusters onto amplified heatmap if significant
-        if len(anomalous_clusters) > 0 and (high_contrast_ratio > 0.015 or max_error > 80):
+        if len(anomalous_clusters) > 0 and (high_contrast_ratio > 0.02 or max_error > 80):
             draw = ImageDraw.Draw(amplified)
             for cl in anomalous_clusters[:8]:
                 draw.rectangle([cl["x"], cl["y"], cl["x"] + cl["w"], cl["y"] + cl["h"]], outline=(255, 50, 50), width=2)
@@ -100,20 +100,16 @@ class ErrorLevelAnalysisEngine:
         heatmap_base64 = self._encode_heatmap(amplified)
 
         # 8. Compute normalized anomaly score (0 - 100)
-        raw_score = (
-            (mean_error * 3.2)
-            + (std_error * 3.8)
-            + (high_contrast_ratio * 320.0)
-            + (max_error * 0.22)
-            + cluster_density_boost
-        )
+        base_score = min((mean_error * 2.5) + (std_error * 2.0), 12.0)
+        contrast_score = min(high_contrast_ratio * 400.0, 20.0)
+        raw_score = base_score + cluster_density_boost + contrast_score
         anomaly_score = float(np.clip(raw_score, 0.0, 100.0))
 
         # 9. Classify severity rating
-        if anomaly_score >= 70.0:
+        if anomaly_score >= 65.0:
             rating = "HIGH_FORGERY"
             is_tampered = True
-        elif anomaly_score >= self.anomaly_threshold:
+        elif anomaly_score >= 45.0 or (len(anomalous_clusters) >= 5 and high_contrast_ratio > 0.03):
             rating = "SUSPICIOUS"
             is_tampered = True
         elif anomaly_score >= 20.0:

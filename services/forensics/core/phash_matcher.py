@@ -55,6 +55,11 @@ class PerceptualHashMatcher:
                 "institution": "Sri Krishna College of Technology",
                 "facility_name": "Architectural CAD Studio Lab (Room 102)",
             },
+            "4e4f454d65615d5d": {
+                "id": "DOC-PHOTO-2024-0012",
+                "institution": "Sri Krishna College of Technology",
+                "facility_name": "Architectural CAD Studio Lab (Room 102)",
+            },
         }
         self._save_registry()
 

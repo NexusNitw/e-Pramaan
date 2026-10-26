@@ -27,6 +27,19 @@ class DigiLockerMockRail:
                 "issuingAuthority": "State Fire and Emergency Services",
             },
         },
+        "K-FIRE-2023-881": {
+            "registry_name": "DigiLocker National Vault (Fire Services)",
+            "status": "EXPIRED",
+            "response_summary": "Document found in DigiLocker repository, but validity expired on 2025-03-09.",
+            "details": {
+                "certificateNumber": "K-FIRE-2023-881",
+                "vaultHash": "sha256-8f2c019a3b9841",
+                "issuanceDate": "2024-03-10",
+                "expiryDate": "2025-03-09",
+                "isRevoked": False,
+                "issuingAuthority": "State Fire and Emergency Services",
+            },
+        },
         "AKTU/AFF/2026/0912": {
             "registry_name": "DigiLocker National Vault (University Affiliation)",
             "status": "MISMATCH",

@@ -20,9 +20,12 @@ class RiskScorer {
     const isOffCampus = forensicData.geoExif && forensicData.geoExif.isWithinCampusBounds === false;
 
     forensicScore = elaScore;
-    if (hasTamperSoftware) {
+    if (forensicData.metadataSoftware && forensicData.metadataSoftware.length > 0) {
       forensicScore = Math.max(forensicScore, 75);
       criticalFlags.push('Editing suite software footprint detected (Photoshop / GIMP)');
+    } else if (forensicData.tamperDetected) {
+      forensicScore = Math.max(forensicScore, 75);
+      criticalFlags.push('Digital tampering detected via compression error-level analysis');
     }
     if (isDuplicate) {
       forensicScore = Math.max(forensicScore, 80);

@@ -80,10 +80,39 @@ class GeotagValidator:
         return self.EARTH_RADIUS_METERS * c
 
     def _extract_gps_from_image(self, image_bytes: bytes) -> Optional[Tuple[float, float]]:
-        """
-        Decodes GPSInfo tags from image EXIF dictionary into decimal coordinates.
-        Supports both modern Pillow get_ifd() and legacy _getexif().
-        """
+        # If input is a PDF document (e.g., statutory facility audit sheet)
+        if image_bytes[:4] == b"%PDF":
+            try:
+                import fitz
+                import re
+                doc = fitz.open(stream=image_bytes, filetype="pdf")
+                for page in doc:
+                    text = page.get_text()
+                    # 1. Regex scan for certified photo coordinates
+                    m = re.search(
+                        r"(?:Photo|Geotag|GPS)[\w\s]*Coordinates?[\s\:\n]+([0-9]{1,3}\.[0-9]+)[\s°]*([NS])?[\s\,]+([0-9]{1,3}\.[0-9]+)[\s°]*([EW])?",
+                        text,
+                        re.IGNORECASE,
+                    )
+                    if m:
+                        lat_val = float(m.group(1)) * (-1.0 if m.group(2) == "S" else 1.0)
+                        lon_val = float(m.group(3)) * (-1.0 if m.group(4) == "W" else 1.0)
+                        doc.close()
+                        return lat_val, lon_val
+
+                    # 2. Check embedded images in PDF
+                    for img_info in page.get_images():
+                        xref = img_info[0]
+                        base_img = doc.extract_image(xref)
+                        if "image" in base_img:
+                            coords = self._extract_gps_from_image(base_img["image"])
+                            if coords:
+                                doc.close()
+                                return coords
+                doc.close()
+            except Exception as pdf_err:
+                logger.debug(f"Could not extract GPS from PDF facility sheet: {pdf_err}")
+
         try:
             with Image.open(io.BytesIO(image_bytes)) as img:
                 gps_dict = None

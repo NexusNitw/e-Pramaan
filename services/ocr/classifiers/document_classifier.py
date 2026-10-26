@@ -130,6 +130,9 @@ class DocumentClassifier:
                 r"classroom\s+photograph",
                 r"library\s+photograph",
                 r"aicte\s+campus\s+facility",
+                r"workstation",
+                r"laboratory",
+                r"ai\s+lab",
             ],
             "secondary": [
                 r"campus",
@@ -137,8 +140,11 @@ class DocumentClassifier:
                 r"photograph",
                 r"facility",
                 r"infrastructure",
+                r"workstation",
+                r"studio",
+                r"aicte",
             ],
-            "min_score": 2.5,
+            "min_score": 2.0,
         },
     }
 
@@ -245,8 +251,14 @@ class DocumentClassifier:
         specific_counts = {k: v for k, v in category_counts.items() if k != "OTHER"}
 
         if not specific_counts:
-            primary_type = "OTHER"
-            overall_confidence = 0.15
+            lower_fn = doc.filename.lower()
+            is_image = not doc.is_pdf or lower_fn.endswith((".jpg", ".jpeg", ".png", ".webp"))
+            if is_image and any(k in lower_fn for k in ["photo", "lab", "facility", "campus", "audit", "studio", "center"]):
+                primary_type = "INFRASTRUCTURE_PHOTO"
+                overall_confidence = 0.85
+            else:
+                primary_type = "OTHER"
+                overall_confidence = 0.15
         else:
             top_specific, top_count = max(specific_counts.items(), key=lambda item: item[1])
             

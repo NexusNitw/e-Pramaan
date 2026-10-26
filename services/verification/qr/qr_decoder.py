@@ -99,6 +99,21 @@ class QRCodeValidator:
             except Exception:
                 payload_type = "TEXT"
                 parsed_attrs = {"raw_text": decoded_text}
+                # Check for key=value or key: value pairs separated by pipe, semicolon, or newline
+                kv_matches = re.findall(r"([A-Za-z0-9_-]+)\s*=\s*([^\|;\n]+)", decoded_text)
+                if not kv_matches:
+                    kv_matches = re.findall(r"([A-Za-z0-9_-]+)\s*:\s*([^\|;\n]+)", decoded_text)
+                if kv_matches:
+                    payload_type = "KEY_VALUE"
+                    for k, v in kv_matches:
+                        key = k.strip().lower()
+                        val = v.strip()
+                        if val.isdigit():
+                            parsed_attrs[key] = int(val)
+                        else:
+                            parsed_attrs[key] = val
+                        if key in ["doc", "ref", "certificate_no", "cert", "id"]:
+                            parsed_attrs["id"] = val
 
         # 3. Cross-reference payload against document text
         matches_document = True

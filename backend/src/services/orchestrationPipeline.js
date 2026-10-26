@@ -81,8 +81,20 @@ class OrchestrationPipeline {
       // Only reassign documentType if OCR classification identified a specific statutory type with reasonable confidence
       if (ocrClass.primary_document_type && ocrClass.primary_document_type !== 'OTHER') {
         doc.documentType = ocrClass.primary_document_type;
-      } else if (!doc.documentType) {
-        doc.documentType = 'OTHER';
+      } else if (!doc.documentType || doc.documentType === 'OTHER') {
+        const lowerName = filename.toLowerCase();
+        if (
+          lowerName.endsWith('.jpg') ||
+          lowerName.endsWith('.jpeg') ||
+          lowerName.endsWith('.png') ||
+          lowerName.includes('photo') ||
+          lowerName.includes('facility') ||
+          lowerName.includes('lab')
+        ) {
+          doc.documentType = 'INFRASTRUCTURE_PHOTO';
+        } else {
+          doc.documentType = 'OTHER';
+        }
       }
 
       if (doc.documentType !== 'OTHER') {
@@ -196,9 +208,25 @@ class OrchestrationPipeline {
 
       await doc.save();
 
-      // Track peak anomaly metrics for risk aggregator
-      if (doc.forensicAnalysis.elaAnomalyScore > maxForensicData.elaAnomalyScore) {
-        maxForensicData = doc.forensicAnalysis;
+      // Track peak anomaly metrics across all application documents for risk aggregator
+      if ((doc.forensicAnalysis.elaAnomalyScore || 0) > (maxForensicData.elaAnomalyScore || 0)) {
+        maxForensicData.elaAnomalyScore = doc.forensicAnalysis.elaAnomalyScore;
+      }
+      if (doc.forensicAnalysis.tamperDetected) {
+        maxForensicData.tamperDetected = true;
+      }
+      if (doc.forensicAnalysis.metadataSoftware && doc.forensicAnalysis.metadataSoftware.length > 0) {
+        maxForensicData.metadataSoftware = [
+          ...new Set([...(maxForensicData.metadataSoftware || []), ...doc.forensicAnalysis.metadataSoftware]),
+        ];
+      }
+      if (doc.forensicAnalysis.isDuplicatePhoto) {
+        maxForensicData.isDuplicatePhoto = true;
+      }
+      if (doc.forensicAnalysis.geoExif) {
+        if (!maxForensicData.geoExif || doc.forensicAnalysis.geoExif.isWithinCampusBounds === false) {
+          maxForensicData.geoExif = doc.forensicAnalysis.geoExif;
+        }
       }
 
       const docTrustSummary = {

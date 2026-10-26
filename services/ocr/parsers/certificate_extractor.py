@@ -61,13 +61,15 @@ class CertificateAttributeExtractor:
 
     def _extract_document_number(self, text: str) -> Optional[str]:
         patterns = [
-            r"(?:certificate|ref|reference|order|noc|deed)\s*(?:no|number)?[\s\.\:\-]+([A-Z0-9\/\-_]{5,35})",
-            r"(?:file\s+no|dispatch\s+no)[\s\.\:\-]+([A-Z0-9\/\-_]{5,35})",
+            r"(?:certificate|ref|reference|order|noc|deed|doc)[\s\w\.\:\-]*?((?=[A-Z0-9\/\-_]*\d)[A-Z0-9\/\-_]{4,35})",
+            r"(?:file\s+no|dispatch\s+no)[\s\.\:\-]+((?=[A-Z0-9\/\-_]*\d)[A-Z0-9\/\-_]{4,35})",
         ]
         for pat in patterns:
             match = re.search(pat, text, re.IGNORECASE)
             if match:
-                return match.group(1).strip()
+                candidate = match.group(1).strip()
+                if not candidate.lower() in ["reference", "certificate", "under", "issued"]:
+                    return candidate
         return None
 
     def _extract_issuing_authority(self, text: str, document_type: str) -> Optional[str]:

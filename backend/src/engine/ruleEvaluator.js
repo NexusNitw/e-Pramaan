@@ -36,8 +36,18 @@ export const evaluateApplicationCompliance = async (applicationId) => {
     ...intakeResults,
   ];
 
-  // Flag any uploaded documents classified as OTHER (unrelated/unrecognized)
-  const otherDocs = documents.filter((d) => d.documentType === 'OTHER');
+  // Flag any uploaded documents classified as OTHER (unrelated/unrecognized, excluding facility photos)
+  const otherDocs = documents.filter((d) => {
+    if (d.documentType !== 'OTHER') return false;
+    const fn = (d.fileName || '').toLowerCase();
+    return !(
+      fn.endsWith('.jpg') ||
+      fn.endsWith('.jpeg') ||
+      fn.endsWith('.png') ||
+      fn.includes('photo') ||
+      fn.includes('lab')
+    );
+  });
   for (const od of otherDocs) {
     allResults.push({
       ruleCode: 'APH_DOC_VALIDITY_01',

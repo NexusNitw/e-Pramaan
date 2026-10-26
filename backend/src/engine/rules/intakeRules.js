@@ -70,6 +70,13 @@ export const evaluateIntakeAndFacultyRules = async (application, institution, do
       }).populate('applicationId');
 
       for (const colDoc of collisions) {
+        // Exclude records belonging to the same institution
+        const otherInstId = colDoc.applicationId?.institution?.toString();
+        const curInstId = (application.institution?._id || application.institution)?.toString();
+        if (otherInstId && curInstId && otherInstId === curInstId) {
+          continue;
+        }
+
         const otherRoster = colDoc.extractedData?.facultyList || [];
         for (const f of otherRoster) {
           if (activeFacultyHashes.includes(f.nationalIdHash)) {

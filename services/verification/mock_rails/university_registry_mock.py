@@ -14,9 +14,12 @@ class UniversityRegistryMockRail:
 
     # Master registry of sanctioned institutional quotas by AICTE ID
     UNIVERSITY_SANCTION_REGISTRY: Dict[str, int] = {
-        "1-9923847162": 180,  # Approved ceiling is 180 seats
-        "1-4928172911": 420,  # Approved ceiling is 420 seats
-        "1-3349182390": 360,  # Approved ceiling is 360 seats
+        "1-9923847162": 180,  # Skyline Institute: Approved ceiling is 180 seats (application requested 300)
+        "1-4928172911": 420,  # National Institute: Approved ceiling is 420 seats
+        "1-7729103940": 180,  # Apex Global College of Pharmacy: Approved ceiling is 180 seats
+        "1-6638102947": 240,  # St. Xavier Institute of Engineering: Approved ceiling is 240 seats
+        "1-8847291038": 120,  # Modern College of Architecture: Approved ceiling is 120 seats
+        "1-3349182390": 360,  # Apex Institute of Technology: Approved ceiling is 360 seats
     }
 
     def query_affiliation(self, aicte_id: str, requested_intake: int = 420, filename: str = "") -> ExternalRegistryResult:

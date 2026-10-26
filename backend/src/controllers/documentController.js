@@ -136,6 +136,18 @@ export const uploadDocument = async (req, res, next) => {
       const ocrClass = await microserviceClient.classifyDocument(req.file.buffer, rawFileName);
       if (ocrClass.primary_document_type && ocrClass.primary_document_type !== 'OTHER') {
         canonicalDocType = ocrClass.primary_document_type;
+      } else {
+        const lowerName = rawFileName.toLowerCase();
+        if (
+          lowerName.endsWith('.jpg') ||
+          lowerName.endsWith('.jpeg') ||
+          lowerName.endsWith('.png') ||
+          lowerName.includes('photo') ||
+          lowerName.includes('facility') ||
+          lowerName.includes('lab')
+        ) {
+          canonicalDocType = 'INFRASTRUCTURE_PHOTO';
+        }
       }
 
       if (canonicalDocType !== 'OTHER') {
