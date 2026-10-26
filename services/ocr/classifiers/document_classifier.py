@@ -120,6 +120,26 @@ class DocumentClassifier:
             ],
             "min_score": 2.5,
         },
+        "INFRASTRUCTURE_PHOTO": {
+            "primary": [
+                r"facility\s+photograph",
+                r"campus\s+(?:facility\s+)?photograph",
+                r"laboratory\s+photograph",
+                r"cad\s+studio",
+                r"computer\s+center",
+                r"classroom\s+photograph",
+                r"library\s+photograph",
+                r"aicte\s+campus\s+facility",
+            ],
+            "secondary": [
+                r"campus",
+                r"laboratory",
+                r"photograph",
+                r"facility",
+                r"infrastructure",
+            ],
+            "min_score": 2.5,
+        },
     }
 
     def classify_page(self, page: LoadedPage) -> PageClassificationResult:
@@ -152,40 +172,50 @@ class DocumentClassifier:
         best_category = "OTHER"
         highest_score = 0.0
         best_matches: List[str] = []
+        has_primary_match = False
 
         for category, rules in self.TAXONOMY.items():
             category_score = 0.0
             matched_rules: List[str] = []
+            category_has_primary = False
 
-            # Primary keywords (weight = 3.0)
+            # Primary keywords (weight = 3.5)
             for pattern in rules["primary"]:
                 matches = re.findall(pattern, text)
                 if matches:
-                    category_score += 3.0 * len(matches)
+                    category_score += 3.5 * len(matches)
                     matched_rules.append(pattern)
+                    category_has_primary = True
 
-            # Secondary keywords (weight = 1.0)
+            # Secondary keywords (weight = 1.0) - only add weight
+            secondary_matches = 0
             for pattern in rules["secondary"]:
                 matches = re.findall(pattern, text)
                 if matches:
                     category_score += 1.0 * min(len(matches), 3)
                     matched_rules.append(pattern)
+                    secondary_matches += 1
 
-            # Normalize confidence score
-            if category_score > highest_score:
+            # A page MUST have at least one primary keyword OR at least 3 distinct secondary keywords
+            # AND reach the minimum required score
+            min_required = rules.get("min_score", 3.0)
+            valid_for_consideration = (category_has_primary or secondary_matches >= 3) and (category_score >= min_required)
+
+            if valid_for_consideration and category_score > highest_score:
                 highest_score = category_score
                 best_category = category
                 best_matches = matched_rules
+                has_primary_match = category_has_primary
 
-        # Calculate final confidence on a 0.0 - 1.0 sigmoid/ratio scale
-        if highest_score >= 8.0:
+        # Calculate final confidence on a 0.0 - 1.0 scale
+        if highest_score >= 8.0 and has_primary_match:
             confidence = min(0.98, 0.70 + (highest_score / 40.0))
+        elif highest_score >= 4.0:
+            confidence = 0.55 + (highest_score / 25.0)
         elif highest_score >= 3.0:
-            confidence = 0.50 + (highest_score / 20.0)
-        elif highest_score > 0:
-            confidence = 0.30 + (highest_score / 15.0)
+            confidence = 0.40 + (highest_score / 20.0)
         else:
-            confidence = 0.15
+            confidence = 0.10
             best_category = "OTHER"
 
         snippet = page.text[:250].replace("\n", " ").strip() if page.text else ""
@@ -203,26 +233,32 @@ class DocumentClassifier:
     def classify_document(self, doc: LoadedDocument) -> Tuple[str, float, List[PageClassificationResult], Dict[str, int]]:
         """
         Classifies an entire multi-page document dossier by aggregating page-level results.
+        Correctly detects unrelated / non-statutory documents when OTHER dominates.
         """
         page_results = [self.classify_page(page) for page in doc.pages]
-
-        # Count frequencies
         category_counts = Counter(res.detected_type for res in page_results)
+        total_pages = len(doc.pages) or 1
 
-        # Remove 'OTHER' from leading if specific categories exist
-        filtered_counts = {k: v for k, v in category_counts.items() if k != "OTHER"}
-        if filtered_counts:
-            primary_type = max(filtered_counts, key=filtered_counts.get)
-        else:
-            primary_type = category_counts.most_common(1)[0][0] if category_counts else "OTHER"
+        other_count = category_counts.get("OTHER", 0)
 
-        # Calculate weighted average confidence for primary type
-        relevant_confs = [
-            res.confidence for res in page_results if res.detected_type == primary_type
-        ]
-        if relevant_confs:
-            overall_confidence = round(sum(relevant_confs) / len(relevant_confs), 3)
+        # Non-OTHER categories
+        specific_counts = {k: v for k, v in category_counts.items() if k != "OTHER"}
+
+        if not specific_counts:
+            primary_type = "OTHER"
+            overall_confidence = 0.15
         else:
-            overall_confidence = 0.20
+            top_specific, top_count = max(specific_counts.items(), key=lambda item: item[1])
+            
+            # If OTHER represents over 60% of pages and specific count is minimal (<= 25% of pages),
+            # the document is fundamentally an unrelated document with incidental keyword collisions.
+            if total_pages >= 3 and other_count > (total_pages * 0.6) and (top_count / total_pages) < 0.35:
+                primary_type = "OTHER"
+                overall_confidence = 0.20
+            else:
+                primary_type = top_specific
+                relevant_confs = [res.confidence for res in page_results if res.detected_type == primary_type]
+                overall_confidence = round(sum(relevant_confs) / len(relevant_confs), 3) if relevant_confs else 0.50
 
         return primary_type, overall_confidence, page_results, dict(category_counts)
+

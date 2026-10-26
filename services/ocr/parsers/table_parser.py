@@ -60,11 +60,6 @@ class FacultyTableParser:
                 faculty_roster.append(extracted)
                 raw_rows.append(extracted.model_dump())
 
-        # If no regex lines matched, provide a structured synthetic fallback parser for mock testing
-        if not faculty_roster and len(document_text) > 50:
-            faculty_roster = self._generate_sample_roster_from_text(document_text)
-            raw_rows = [f.model_dump() for f in faculty_roster]
-
         return faculty_roster, raw_rows, detected_columns
 
     def _extract_faculty_from_line(self, line: str) -> FacultyMemberExtracted:
@@ -75,30 +70,42 @@ class FacultyTableParser:
         tokens = re.split(r"\||\t|\s{2,}", line)
         tokens = [t.strip() for t in tokens if t.strip()]
 
+        # Strip leading row numbers (e.g., "1 ", "1.", "1 |")
+        clean_line = re.sub(r"^\s*\d+[\.\s\|]+", "", line).strip()
+
         # Identify Designation
         matched_designation = "Assistant Professor"
         for pat, norm in self.DESIGNATION_MAP.items():
-            if re.search(pat, line, re.IGNORECASE):
+            if re.search(pat, clean_line, re.IGNORECASE):
                 matched_designation = norm
                 break
 
         # Identify Department
         matched_dept = "Computer Science & Engineering"
         for pat, norm in self.DEPARTMENT_MAP.items():
-            if re.search(pat, line, re.IGNORECASE):
+            if re.search(pat, clean_line, re.IGNORECASE):
                 matched_dept = norm
                 break
 
-        # Identify Name (usually starting with Dr., Prof., or first alphabetic segment)
+        # Identify Name (handles Dr., Prof., uppercase, and mixed case)
         name_match = re.search(
-            r"(?:Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
-            line,
+            r"(?:Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)?\s*([A-Za-z]+(?:\s+[A-Za-z]+)+)",
+            clean_line,
         )
         faculty_name = name_match.group(0).strip() if name_match else (tokens[0] if tokens else "Faculty Member")
+        # Remove designation from name if accidentally captured
+        for desig in ["Professor", "Associate", "Assistant", "HOD", "Director"]:
+            faculty_name = re.sub(rf"\b{desig}\b.*", "", faculty_name, flags=re.IGNORECASE).strip()
+
+        if not faculty_name:
+            faculty_name = tokens[0] if tokens else "Faculty Member"
+        if not faculty_name or faculty_name.lower() in ["professor", "associate", "assistant", "dr", "prof"]:
+            faculty_name = "Faculty Member"
 
         # Identify Date of Joining (DD/MM/YYYY or YYYY-MM-DD)
-        date_match = re.search(r"\b(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}|\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})\b", line)
+        date_match = re.search(r"\b(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}|\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})\b", clean_line)
         date_of_joining = date_match.group(1) if date_match else "2021-08-01"
+
 
         # Identify Qualification
         qual_match = re.search(r"\b(Ph\.?D|M\.?Tech|M\.?E|B\.?Tech|M\.?Pharm|MBA)\b", line, re.IGNORECASE)

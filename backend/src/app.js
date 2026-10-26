@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -11,11 +12,12 @@ import applicationRoutes from './routes/applicationRoutes.js';
 import documentRoutes from './routes/documentRoutes.js';
 import ruleRoutes from './routes/ruleRoutes.js';
 import scrutinyRoutes from './routes/scrutinyRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 
-// Security HTTP headers
-app.use(helmet());
+// Security HTTP headers with permissive cross-origin resource policy for document previews
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // Dynamic CORS configuration allowing local dev, Vercel preview/production URLs, and configured CLIENT_URL
 app.use(
@@ -80,7 +82,11 @@ app.get('/', healthHandler);
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
+// Static uploads serving for inline document viewing
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+
 // Mount Core API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/institutions', institutionRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/documents', documentRoutes);

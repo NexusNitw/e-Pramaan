@@ -1,0 +1,360 @@
+import React, { useState } from 'react';
+import {
+  ShieldCheck,
+  Building2,
+  Lock,
+  Mail,
+  UserCheck,
+  ArrowRight,
+  AlertCircle,
+  FileText,
+  CheckCircle2,
+} from 'lucide-react';
+import { loginUser, registerUser } from '../../config/api';
+
+export default function LoginPage({ onLoginSuccess }) {
+  const [isRegister, setIsRegister] = useState(false);
+  const [role, setRole] = useState('OFFICER'); // 'OFFICER' or 'APPLICANT'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [institutionName, setInstitutionName] = useState('');
+  const [aictePermanentId, setAictePermanentId] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Quick Demo Login Handler
+  const handleQuickLogin = async (demoRole) => {
+    setError(null);
+    setLoading(true);
+    const demoEmail = demoRole === 'OFFICER' ? 'officer@aicte.gov.in' : 'applicant@college.edu.in';
+    const demoPassword = 'Password@123';
+
+    try {
+      const res = await loginUser(demoEmail, demoPassword);
+      if (res && res.token && res.user) {
+        localStorage.setItem('epramaan_token', res.token);
+        localStorage.setItem('epramaan_user', JSON.stringify(res.user));
+        onLoginSuccess(res.user);
+      }
+    } catch (err) {
+      // If user wasn't in DB yet, try to register the demo user directly or fallback locally
+      try {
+        const fallbackRes = await registerUser({
+          name: demoRole === 'OFFICER' ? 'Dr. Vikram Malhotra' : 'Apex Institute Director',
+          email: demoEmail,
+          password: demoPassword,
+          role: demoRole,
+          officerDesignation: demoRole === 'OFFICER' ? 'Senior Scrutiny Officer' : '',
+          institutionName: demoRole === 'APPLICANT' ? 'Apex Institute of Technology & Sciences' : '',
+          aictePermanentId: demoRole === 'APPLICANT' ? '1-3349182390' : '',
+        });
+        if (fallbackRes && fallbackRes.token) {
+          localStorage.setItem('epramaan_token', fallbackRes.token);
+          localStorage.setItem('epramaan_user', JSON.stringify(fallbackRes.user));
+          onLoginSuccess(fallbackRes.user);
+          return;
+        }
+      } catch (regErr) {
+        // Fallback for purely offline frontend demo
+        const mockUser = {
+          name: demoRole === 'OFFICER' ? 'Dr. Vikram Malhotra (Senior Officer)' : 'Apex Institute of Technology',
+          email: demoEmail,
+          role: demoRole,
+          institutionName: demoRole === 'APPLICANT' ? 'Apex Institute of Technology & Sciences' : '',
+          aictePermanentId: demoRole === 'APPLICANT' ? '1-3349182390' : '',
+          officerDesignation: demoRole === 'OFFICER' ? 'Senior Scrutiny Officer' : '',
+        };
+        localStorage.setItem('epramaan_token', 'mock_jwt_token_2026');
+        localStorage.setItem('epramaan_user', JSON.stringify(mockUser));
+        onLoginSuccess(mockUser);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (isRegister) {
+        const payload = {
+          name,
+          email,
+          password,
+          role,
+          institutionName: role === 'APPLICANT' ? institutionName : '',
+          aictePermanentId: role === 'APPLICANT' ? aictePermanentId : '',
+          officerDesignation: role === 'OFFICER' ? 'Scrutiny Officer' : '',
+        };
+        const res = await registerUser(payload);
+        if (res && res.token && res.user) {
+          localStorage.setItem('epramaan_token', res.token);
+          localStorage.setItem('epramaan_user', JSON.stringify(res.user));
+          onLoginSuccess(res.user);
+        }
+      } else {
+        const res = await loginUser(email, password);
+        if (res && res.token && res.user) {
+          localStorage.setItem('epramaan_token', res.token);
+          localStorage.setItem('epramaan_user', JSON.stringify(res.user));
+          onLoginSuccess(res.user);
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Authentication failed. Please verify credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-100">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
+        {/* Emblem / Portal Header */}
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 shadow-md mb-4 text-blue-400">
+          <ShieldCheck className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-white">
+          e-Pramaan Portal
+        </h1>
+        <p className="mt-1 text-xs text-slate-400 font-medium">
+          All India Council for Technical Education (AICTE)
+        </p>
+        <p className="text-xs text-slate-400 mt-0.5">
+          National Regulatory Document Scrutiny & Compliance Verification System
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg px-4 sm:px-0">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-6 sm:p-8">
+          {/* Quick Demo Access Bar */}
+          <div className="mb-6">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-2.5">
+              Select Role for Instant Demonstration:
+            </span>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('OFFICER')}
+                disabled={loading}
+                className="flex flex-col items-start p-3.5 rounded-xl border border-blue-900/60 bg-blue-950/30 hover:bg-blue-950/60 hover:border-blue-700 transition-all text-left group"
+              >
+                <div className="flex items-center space-x-2 text-blue-400 text-xs font-semibold mb-1">
+                  <UserCheck className="w-4 h-4" />
+                  <span>Scrutiny Officer</span>
+                </div>
+                <p className="text-[11px] text-slate-400 line-clamp-1">
+                  Review queue, verify APH norms & audit
+                </p>
+                <span className="text-[10px] text-blue-300 font-mono mt-1 group-hover:translate-x-0.5 transition-transform inline-flex items-center">
+                  Sign in as Officer →
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('APPLICANT')}
+                disabled={loading}
+                className="flex flex-col items-start p-3.5 rounded-xl border border-indigo-900/60 bg-indigo-950/30 hover:bg-indigo-950/60 hover:border-indigo-700 transition-all text-left group"
+              >
+                <div className="flex items-center space-x-2 text-indigo-400 text-xs font-semibold mb-1">
+                  <Building2 className="w-4 h-4" />
+                  <span>College Applicant</span>
+                </div>
+                <p className="text-[11px] text-slate-400 line-clamp-1">
+                  Upload dossiers & track approval status
+                </p>
+                <span className="text-[10px] text-indigo-300 font-mono mt-1 group-hover:translate-x-0.5 transition-transform inline-flex items-center">
+                  Sign in as College →
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-800" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-slate-900 px-3 text-slate-400 font-medium">
+                Or sign in with credentials
+              </span>
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-5 p-3 rounded-xl bg-red-950/50 border border-red-900 text-red-300 text-xs flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {isRegister && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Full Name / Representative Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Dr. Rameshwar Sharma"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Role
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRole('OFFICER')}
+                      className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all ${
+                        role === 'OFFICER'
+                          ? 'bg-blue-600 text-white border-blue-500'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      AICTE Scrutiny Officer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole('APPLICANT')}
+                      className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all ${
+                        role === 'APPLICANT'
+                          ? 'bg-blue-600 text-white border-blue-500'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      Institution Applicant
+                    </button>
+                  </div>
+                </div>
+
+                {role === 'APPLICANT' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Institution Name
+                      </label>
+                      <input
+                        type="text"
+                        value={institutionName}
+                        onChange={(e) => setInstitutionName(e.target.value)}
+                        placeholder="Apex College of Engg"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        AICTE Permanent ID
+                      </label>
+                      <input
+                        type="text"
+                        value={aictePermanentId}
+                        onChange={(e) => setAictePermanentId(e.target.value)}
+                        placeholder="1-3349182390"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Official Email Address
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={isRegister ? "name@institution.edu.in" : "officer@aicte.gov.in"}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                />
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                />
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-2 py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors shadow-sm flex items-center justify-center space-x-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <span>Processing...</span>
+              ) : (
+                <>
+                  <span>{isRegister ? 'Register Account' : 'Sign In to Portal'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Toggle between Login and Register */}
+          <div className="mt-5 text-center text-xs text-slate-400">
+            {isRegister ? (
+              <span>
+                Already have an authorized account?{' '}
+                <button
+                  type="button"
+                  onClick={() => setIsRegister(false)}
+                  className="text-blue-400 hover:underline font-medium"
+                >
+                  Sign In
+                </button>
+              </span>
+            ) : (
+              <span>
+                Registering a new institution or officer?{' '}
+                <button
+                  type="button"
+                  onClick={() => setIsRegister(true)}
+                  className="text-blue-400 hover:underline font-medium"
+                >
+                  Create Account
+                </button>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 text-center text-[11px] text-slate-400 font-sans">
+          Protected by Indian Information Technology Act 2000 & PKI Trust Infrastructure.
+        </div>
+      </div>
+    </div>
+  );
+}

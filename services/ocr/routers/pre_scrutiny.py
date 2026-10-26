@@ -89,18 +89,27 @@ async def run_pre_scrutiny_barrier(
         deskew_res = deskewer.detect_skew_angle(first_page_bytes, file.filename)
 
         # 4. Map Bounding Boxes for UI Rendering
-        sample_attrs = {
-            "document_number": "NOC-2026-MH-0892",
-            "sanctioned_intake": 420,
-            "built_up_area_sqm": 14200.0,
-            "expiry_date": "2027-01-14",
-        }
-        bboxes = bbox_mapper.map_document_entities(
-            sample_attrs,
-            page_width=loaded_doc.pages[0].width,
-            page_height=loaded_doc.pages[0].height,
-            page_number=1,
-        )
+        if loaded_doc.pages and loaded_doc.pages[0].bboxes:
+            bboxes = bbox_mapper.map_ocr_boxes(
+                loaded_doc.pages[0].bboxes,
+                page_width=loaded_doc.pages[0].width,
+                page_height=loaded_doc.pages[0].height,
+                page_number=1,
+            )
+        else:
+            sample_attrs = {
+                "document_number": "NOC-2026-MH-0892",
+                "sanctioned_intake": 420,
+                "built_up_area_sqm": 14200.0,
+                "expiry_date": "2027-01-14",
+            }
+            bboxes = bbox_mapper.map_document_entities(
+                sample_attrs,
+                page_width=loaded_doc.pages[0].width,
+                page_height=loaded_doc.pages[0].height,
+                page_number=1,
+            )
+
 
         # 5. Ingestion Gate Decision: Reject if severely blurred
         is_accepted = not blur_res.is_blurry

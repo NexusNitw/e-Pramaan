@@ -113,6 +113,43 @@ class BoundingBoxCoordinateMapper:
 
         return entities
 
+    def map_ocr_boxes(
+        self,
+        ocr_boxes: List[Dict[str, Any]],
+        page_width: float = 595.0,
+        page_height: float = 842.0,
+        page_number: int = 1,
+    ) -> List[BoundingBoxEntity]:
+        """
+        Translates raw detected OCR bounding boxes into normalized UI entities.
+        """
+        entities: List[BoundingBoxEntity] = []
+        for idx, box in enumerate(ocr_boxes[:60]):
+            rect = box.get("rect", {})
+            text = box.get("text", "")
+            conf = box.get("confidence", 0.95)
+            x = float(rect.get("x", 0.0))
+            y = float(rect.get("y", 0.0))
+            w = float(rect.get("width", 100.0))
+            h = float(rect.get("height", 20.0))
+
+            entities.append(
+                self._create_entity(
+                    field_name=f"ocr_line_{idx + 1}",
+                    text_value=text,
+                    page=page_number,
+                    x=x,
+                    y=y,
+                    width=w,
+                    height=h,
+                    page_w=page_width,
+                    page_h=page_height,
+                    conf=conf,
+                )
+            )
+        return entities
+
+
     def _create_entity(
         self,
         field_name: str,

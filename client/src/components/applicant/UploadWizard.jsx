@@ -1,31 +1,27 @@
 import React, { useState } from 'react';
 import {
   UploadCloud,
-  FileCheck,
+  FileText,
   Building,
   CheckCircle,
-  AlertCircle,
-  FileText,
-  Camera,
   ArrowRight,
   ArrowLeft,
-  FileCheck2,
+  CheckCircle2,
 } from 'lucide-react';
 import { uploadDocumentFile, createApplicationDossier, runScrutinyPipeline } from '../../config/api';
 
-const DOCUMENT_CATEGORIES = [
-  { id: 'fire_noc', label: 'Fire Safety NOC', required: true, icon: FileText, desc: 'Issued by State Fire & Rescue Services' },
-  { id: 'land_deed', label: 'Land Title / Sale Deed', required: true, icon: FileText, desc: 'Khasra/Khatauni or registered conveyance deed' },
-  { id: 'affiliation_letter', label: 'University Affiliation Letter', required: true, icon: FileText, desc: 'Current academic year intake sanction' },
-  { id: 'faculty_roster', label: 'Faculty Master Roster', required: true, icon: FileText, desc: 'CSV or PDF roster with national ID hashes' },
-  { id: 'infra_photo', label: 'Facility & Lab Photographs', required: false, icon: Camera, desc: 'GPS EXIF-enabled campus facility images' },
+const REQUIRED_DOCUMENTS = [
+  { id: 'fire_noc', label: 'Fire Safety NOC Certificate', required: true, desc: 'Issued by State Fire & Rescue Services (NBC Part IV)' },
+  { id: 'affiliation_letter', label: 'University Affiliation Letter', required: true, desc: 'Current academic session sanctioned intake notification' },
+  { id: 'faculty_roster', label: 'Faculty Master Roster', required: true, desc: 'Teaching faculty sheet with designations and qualifications' },
+  { id: 'land_deed', label: 'Land Title / Conveyance Deed', required: true, desc: 'Registered property deed with Khasra/Survey numbers' },
 ];
 
-export default function UploadWizard({ onSubmissionComplete }) {
+export default function UploadWizard({ onSubmissionComplete, currentUser }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
-    aictePermanentId: '1-3349182390',
-    institutionName: 'Apex Institute of Technology & Sciences',
+    aictePermanentId: currentUser?.aictePermanentId || '1-3349182390',
+    institutionName: currentUser?.institutionName || 'Apex Institute of Technology & Sciences',
     category: 'EXTENSION_OF_APPROVAL',
     academicYear: '2026-2027',
     requestedIntake: 360,
@@ -51,14 +47,10 @@ export default function UploadWizard({ onSubmissionComplete }) {
           name: file.name,
           size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
           type: file.type || 'application/pdf',
-          valid: true,
         },
       }));
     }
   };
-
-  const [cloudinaryUrls, setCloudinaryUrls] = useState([]);
-  const [createdApplicationRecord, setCreatedApplicationRecord] = useState(null);
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
@@ -66,7 +58,7 @@ export default function UploadWizard({ onSubmissionComplete }) {
     setTrackingId(generatedId);
 
     try {
-      // 1. Create Application in MongoDB Atlas Gateway
+      // 1. Create Application
       let createdApp = null;
       try {
         const appRes = await createApplicationDossier({
@@ -79,215 +71,179 @@ export default function UploadWizard({ onSubmissionComplete }) {
           academicYear: formData.academicYear || '2026-2027',
         });
         createdApp = appRes.data;
-        setCreatedApplicationRecord(createdApp);
       } catch (appErr) {
-        console.warn('[UploadWizard] Offline fallback for application creation:', appErr.message);
+        console.warn('[UploadWizard] Offline fallback:', appErr.message);
       }
 
-      // 2. Stream documents to Cloudinary & register in MongoDB
+      // 2. Upload documents
       const appId = createdApp?._id;
       const instId = createdApp?.institution?._id || createdApp?.institution;
 
       const uploadPromises = Object.entries(uploadedFiles).map(async ([categoryId, item]) => {
         if (!item.file) return null;
-
         try {
-          const result = await uploadDocumentFile(item.file, categoryId, appId, instId);
-          return {
-            category: categoryId,
-            fileName: item.name,
-            storageUrl: result.data?.storageUrl,
-            publicId: result.data?.publicId,
-            fileHash: result.data?.fileHashSha256,
-          };
+          return await uploadDocumentFile(item.file, categoryId, appId, instId);
         } catch (uploadErr) {
-          console.warn(`[Cloudinary Dispatch] Fallback for ${item.name}:`, uploadErr.message);
-          return {
-            category: categoryId,
-            fileName: item.name,
-            storageUrl: `https://res.cloudinary.com/aicte-epranam/raw/upload/${item.name}`,
-          };
+          return null;
         }
       });
 
-      const results = await Promise.all(uploadPromises);
-      const successful = results.filter(Boolean);
-      setCloudinaryUrls(successful);
+      await Promise.all(uploadPromises);
 
-      // 3. Trigger Automated Multi-Service AI Scrutiny Pipeline
+      // 3. Trigger Scrutiny Pipeline
       if (appId) {
         try {
-          const scrutinyRes = await runScrutinyPipeline(appId);
-          if (scrutinyRes.data) {
-            setCreatedApplicationRecord((prev) => ({
-              ...prev,
-              triageStatus: scrutinyRes.data.triageStatus,
-              compositeRiskScore: scrutinyRes.data.compositeRiskScore,
-            }));
-          }
-        } catch (scrutinyErr) {
-          console.warn('[UploadWizard] Microservice pipeline offline fallback:', scrutinyErr.message);
+          await runScrutinyPipeline(appId);
+        } catch (e) {
+          // background
         }
       }
 
       setIsSubmitting(false);
-      setCurrentStep(4);
+      setCurrentStep(3); // Completed step
+      if (onSubmissionComplete) {
+        onSubmissionComplete(generatedId, createdApp);
+      }
     } catch (err) {
-      console.error('Final dispatch error:', err);
       setIsSubmitting(false);
-      setCurrentStep(4);
+      setCurrentStep(3);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
-      {/* Wizard Header Progress */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
-          <span className={currentStep >= 1 ? 'text-blue-400 font-bold' : ''}>1. Institution Data</span>
-          <span className={currentStep >= 2 ? 'text-blue-400 font-bold' : ''}>2. Dossier Ingestion</span>
-          <span className={currentStep >= 3 ? 'text-blue-400 font-bold' : ''}>3. Pre-Scrutiny QA</span>
-          <span className={currentStep >= 4 ? 'text-emerald-400 font-bold' : ''}>4. Dispatch</span>
+    <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 font-sans">
+      {/* Wizard Step Indicator */}
+      <div className="mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+          <h2 className="text-lg font-bold text-white">
+            {currentStep === 1 && 'Step 1: Institutional & Application Scope'}
+            {currentStep === 2 && 'Step 2: Statutory Document Uploads'}
+            {currentStep === 3 && 'Application Submitted'}
+          </h2>
+          <p className="text-xs text-slate-400">
+            {currentStep === 1 && 'Fill required institutional parameters for AICTE regulatory verification'}
+            {currentStep === 2 && 'Upload statutory certificates for regulatory compliance and OCR scrutiny'}
+            {currentStep === 3 && 'Dossier successfully registered in the AICTE verification queue'}
+          </p>
         </div>
-        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-          <div
-            className="bg-gradient-to-r from-blue-500 to-sky-400 h-full transition-all duration-300"
-            style={{ width: `${(currentStep / 4) * 100}%` }}
-          ></div>
+        <div className="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300">
+          Step {Math.min(currentStep, 2)} of 2
         </div>
       </div>
 
-      {/* STEP 1: Institutional Profile */}
+      {/* STEP 1: Institutional & Application Details */}
       {currentStep === 1 && (
-        <div className="glass-panel p-6 sm:p-8 rounded-2xl shadow-xl space-y-6">
-          <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
-            <Building className="w-6 h-6 text-blue-400" />
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5 shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <h2 className="text-xl font-bold text-white">Step 1: Institutional & Application Details</h2>
-              <p className="text-xs text-slate-400">Specify institutional identity and regulatory approval scope</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">AICTE Permanent ID *</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">AICTE Permanent ID *</label>
               <input
                 type="text"
                 name="aictePermanentId"
                 value={formData.aictePermanentId}
                 onChange={handleInputChange}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
-                placeholder="1-XXXXXXXXXX"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                placeholder="1-3349182390"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Institution Name *</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Institution Name *</label>
               <input
                 type="text"
                 name="institutionName"
                 value={formData.institutionName}
                 onChange={handleInputChange}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Application Category *</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Application Type *</label>
               <select
                 name="category"
                 value={formData.category}
                 onChange={handleInputChange}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
               >
                 <option value="EXTENSION_OF_APPROVAL">Extension of Approval (EoA)</option>
                 <option value="NEW_INSTITUTION">New Institution Setup</option>
                 <option value="INCREASE_IN_INTAKE">Increase in Intake Capacity</option>
-                <option value="INTRODUCTION_OF_SUPERNUMERARY_SEATS">Introduction of Supernumerary Seats</option>
+                <option value="INTRODUCTION_OF_SUPERNUMERARY_SEATS">Supernumerary Seats</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Academic Cycle</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Academic Cycle</label>
               <input
                 type="text"
                 name="academicYear"
                 value={formData.academicYear}
                 readOnly
-                className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-400"
+                className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-400 font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Proposed Total Seat Intake *</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Sanctioned / Requested Intake *</label>
               <input
                 type="number"
                 name="requestedIntake"
                 value={formData.requestedIntake}
                 onChange={handleInputChange}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Current Active Student Enrollment</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1">Total Active Students Enrolled *</label>
               <input
                 type="number"
                 name="totalStudentEnrolled"
                 value={formData.totalStudentEnrolled}
                 onChange={handleInputChange}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
               />
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-slate-800">
+          <div className="flex justify-end pt-3 border-t border-slate-800">
             <button
               onClick={() => setCurrentStep(2)}
-              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md shadow-blue-500/20"
+              className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors shadow-sm"
             >
-              <span>Continue to Document Uploads</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>Continue to Uploads</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: Document Ingestion Dropzone */}
+      {/* STEP 2: Statutory Document Uploads */}
       {currentStep === 2 && (
-        <div className="glass-panel p-6 sm:p-8 rounded-2xl shadow-xl space-y-6">
-          <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
-            <UploadCloud className="w-6 h-6 text-blue-400" />
-            <div>
-              <h2 className="text-xl font-bold text-white">Step 2: Multi-Document Dossier Ingestion</h2>
-              <p className="text-xs text-slate-400">Upload primary regulatory certificates (PDF / High-res scans)</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {DOCUMENT_CATEGORIES.map((cat) => {
-              const uploaded = uploadedFiles[cat.id];
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5 shadow-sm">
+          <div className="space-y-3">
+            {REQUIRED_DOCUMENTS.map((doc) => {
+              const uploaded = uploadedFiles[doc.id];
               return (
                 <div
-                  key={cat.id}
-                  className="glass-card p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800 hover:border-slate-700 transition-all"
+                  key={doc.id}
+                  className="bg-slate-950 border border-slate-800 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-700 transition-colors"
                 >
                   <div className="flex items-start space-x-3">
-                    <div className="p-2.5 rounded-lg bg-blue-950/60 border border-blue-800 text-blue-400 mt-0.5">
-                      <cat.icon className="w-5 h-5" />
+                    <div className="p-2 rounded bg-slate-900 text-blue-400 mt-0.5 border border-slate-800">
+                      <FileText className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm font-semibold text-white">{cat.label}</span>
-                        {cat.required && (
-                          <span className="text-[10px] bg-red-950/80 text-red-400 px-2 py-0.5 rounded border border-red-900">
-                            Required
-                          </span>
-                        )}
+                        <span className="text-xs font-semibold text-white">{doc.label}</span>
+                        <span className="text-[10px] text-red-400 bg-red-950/60 px-1.5 py-0.2 rounded border border-red-900/60">
+                          Mandatory
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-400">{cat.desc}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{doc.desc}</p>
                       {uploaded && (
-                        <div className="flex items-center space-x-2 mt-1 text-xs text-emerald-400 font-mono">
+                        <div className="flex items-center space-x-1.5 mt-1 text-xs text-emerald-400 font-mono">
                           <CheckCircle className="w-3.5 h-3.5" />
                           <span>{uploaded.name} ({uploaded.size})</span>
                         </div>
@@ -296,14 +252,14 @@ export default function UploadWizard({ onSubmissionComplete }) {
                   </div>
 
                   <div>
-                    <label className="cursor-pointer inline-flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all">
-                      <UploadCloud className="w-4 h-4 text-slate-400" />
-                      <span>{uploaded ? 'Replace File' : 'Select PDF'}</span>
+                    <label className="cursor-pointer inline-flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                      <UploadCloud className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{uploaded ? 'Replace' : 'Upload File'}</span>
                       <input
                         type="file"
                         className="hidden"
                         accept=".pdf,.png,.jpg,.jpeg"
-                        onChange={(e) => handleFileUpload(cat.id, e)}
+                        onChange={(e) => handleFileUpload(doc.id, e)}
                       />
                     </label>
                   </div>
@@ -312,111 +268,26 @@ export default function UploadWizard({ onSubmissionComplete }) {
             })}
           </div>
 
-          <div className="flex justify-between pt-4 border-t border-slate-800">
+          <div className="flex justify-between items-center pt-3 border-t border-slate-800">
             <button
               onClick={() => setCurrentStep(1)}
-              className="flex items-center space-x-2 text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm transition-all"
+              className="flex items-center space-x-1.5 text-slate-400 hover:text-white px-3 py-1.5 rounded text-xs transition-colors"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Previous</span>
             </button>
-            <button
-              onClick={() => setCurrentStep(3)}
-              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md shadow-blue-500/20"
-            >
-              <span>Review Pre-Scrutiny QA</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* STEP 3: Pre-Scrutiny QA & Client Review */}
-      {currentStep === 3 && (
-        <div className="glass-panel p-6 sm:p-8 rounded-2xl shadow-xl space-y-6">
-          <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
-            <FileCheck2 className="w-6 h-6 text-blue-400" />
-            <div>
-              <h2 className="text-xl font-bold text-white">Step 3: Ingestion Barrier & Pre-Scrutiny QA</h2>
-              <p className="text-xs text-slate-400">Automated client-side completeness and resolution validation</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
-              <span className="text-xs text-slate-400">Attached Documents</span>
-              <p className="text-2xl font-bold text-white mt-1 font-mono">
-                {Object.keys(uploadedFiles).length} / 5
-              </p>
-            </div>
-            <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
-              <span className="text-xs text-slate-400">Ingestion Barrier QA</span>
-              <p className="text-2xl font-bold text-emerald-400 mt-1 flex items-center space-x-1">
-                <CheckCircle className="w-5 h-5 inline" />
-                <span>Passed</span>
-              </p>
-            </div>
-            <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
-              <span className="text-xs text-slate-400">Target Pipeline</span>
-              <p className="text-sm font-semibold text-blue-300 mt-1">
-                OCR + Forensics + PKI Trust
-              </p>
-            </div>
-          </div>
-
-          <div className="border border-slate-800 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Filename</th>
-                  <th className="px-4 py-3">File Size</th>
-                  <th className="px-4 py-3">Pre-Check</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono">
-                {DOCUMENT_CATEGORIES.map((cat) => {
-                  const uploaded = uploadedFiles[cat.id];
-                  return (
-                    <tr key={cat.id} className="hover:bg-slate-800/20">
-                      <td className="px-4 py-3 font-sans font-medium text-slate-200">{cat.label}</td>
-                      <td className="px-4 py-3 text-slate-400">{uploaded ? uploaded.name : '— (Auto-mocked in demo)'}</td>
-                      <td className="px-4 py-3 text-slate-400">{uploaded ? uploaded.size : '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center space-x-1 text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900 text-[10px]">
-                          <CheckCircle className="w-3 h-3" />
-                          <span>Ready for Processing</span>
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex justify-between pt-4 border-t border-slate-800">
-            <button
-              onClick={() => setCurrentStep(2)}
-              className="flex items-center space-x-2 text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm transition-all"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
-            </button>
             <button
               onClick={handleFinalSubmit}
               disabled={isSubmitting}
-              className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-lg shadow-blue-500/25"
+              className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
             >
               {isSubmitting ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                  <span>Dispatching to Microservice Pipeline...</span>
-                </>
+                <span>Submitting for Scrutiny...</span>
               ) : (
                 <>
-                  <span>Dispatch Dossier for Scrutiny</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Submit Application</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
             </button>
@@ -424,62 +295,32 @@ export default function UploadWizard({ onSubmissionComplete }) {
         </div>
       )}
 
-      {/* STEP 4: Submission Confirmation & Tracking */}
-      {currentStep === 4 && (
-        <div className="glass-panel p-8 rounded-2xl shadow-xl text-center space-y-6">
-          <div className="w-16 h-16 bg-emerald-950/80 border border-emerald-700 text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
-            <CheckCircle className="w-8 h-8" />
+      {/* STEP 3: Submission Confirmation */}
+      {currentStep === 3 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 bg-emerald-950/80 border border-emerald-800 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-white">Application Dossier Dispatched Successfully!</h2>
-            <p className="text-sm text-slate-400 max-w-md mx-auto">
-              Your application has been ingested into the AICTE verification queue. Downstream OCR, forensic tampering detection, and PKI validation pipelines have been triggered.
+          <div>
+            <h3 className="text-lg font-bold text-white">Application Submitted for Scrutiny</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+              Your application has been registered with the AICTE Regulatory Council. Scrutiny officers will examine statutory documents, OCR extracts, and APH compliance ratios.
             </p>
           </div>
 
-          <div className="bg-slate-900 p-4 rounded-xl max-w-sm mx-auto border border-slate-800 font-mono">
-            <span className="text-xs text-slate-500 block mb-1">Dossier Tracking Number</span>
-            <span className="text-lg font-bold text-sky-400 tracking-wider">{trackingId}</span>
+          <div className="bg-slate-950 p-3.5 rounded-lg border border-slate-800 max-w-sm mx-auto font-mono text-xs">
+            <span className="text-slate-400 block text-[11px] mb-0.5">Tracking Reference Number</span>
+            <span className="text-blue-400 font-bold text-sm tracking-wide">{trackingId}</span>
           </div>
 
-          {cloudinaryUrls.length > 0 && (
-            <div className="bg-slate-900/60 p-4 rounded-xl max-w-lg mx-auto border border-slate-800 text-left">
-              <span className="text-xs font-semibold text-slate-300 block mb-2 flex items-center space-x-1.5">
-                <UploadCloud className="w-4 h-4 text-sky-400" />
-                <span>Cloudinary Storage Manifest ({cloudinaryUrls.length} files securely stored)</span>
-              </span>
-              <ul className="space-y-1.5 text-xs font-mono text-slate-400">
-                {cloudinaryUrls.map((u, i) => (
-                  <li key={i} className="flex items-center justify-between truncate bg-slate-950/60 px-2.5 py-1.5 rounded border border-slate-800">
-                    <span className="text-slate-300 truncate max-w-[200px]">{u.fileName}</span>
-                    <a
-                      href={u.storageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-400 hover:text-sky-300 underline ml-2 shrink-0"
-                    >
-                      View on Cloudinary
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="pt-4 flex justify-center space-x-4">
-            <button
-              onClick={() => onSubmissionComplete(trackingId, createdApplicationRecord)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-md shadow-indigo-500/30"
-            >
-              Inspect Dossier in Scrutiny Console
-            </button>
+          <div className="pt-2">
             <button
               onClick={() => {
                 setUploadedFiles({});
                 setCurrentStep(1);
               }}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-lg text-sm transition-all"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
             >
               Submit Another Application
             </button>

@@ -1,91 +1,102 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, FileText, LayoutDashboard, Cpu, CheckCircle2, AlertCircle } from 'lucide-react';
-import { checkSystemHealth } from '../../config/api';
+import React from 'react';
+import {
+  ShieldCheck,
+  Building2,
+  UserCheck,
+  LogOut,
+  SlidersHorizontal,
+} from 'lucide-react';
 
-export default function Navbar({ activePortal, setActivePortal }) {
-  const [isGatewayOnline, setIsGatewayOnline] = useState(false);
+export default function Navbar({ currentUser, activePortal, setActivePortal, onLogout }) {
+  const isOfficer = currentUser?.role === 'OFFICER';
+  const isAdmin = currentUser?.role === 'ADMIN';
 
-  useEffect(() => {
-    checkSystemHealth()
-      .then((data) => {
-        if (data && data.status === 'ONLINE') {
-          setIsGatewayOnline(true);
-        }
-      })
-      .catch(() => setIsGatewayOnline(false));
-  }, []);
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b border-slate-800">
+    <header className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand & AICTE identity */}
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <ShieldCheck className="w-6 h-6 text-white" />
+            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm">
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-blue-400 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
+                <span className="font-bold text-base tracking-tight text-white">
                   e-Pramaan
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 border border-blue-800 font-mono">
-                  v1.0 AICTE
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                  AICTE Regulatory Portal
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Regulatory Compliance, Intelligent OCR & Forensic Trust Rails
+              <p className="text-[11px] text-slate-400 hidden sm:block">
+                National Document Scrutiny & Compliance Verification
               </p>
             </div>
           </div>
 
-          {/* Microservice Health Indicators */}
-          <div className="hidden lg:flex items-center space-x-2 text-xs font-mono bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800">
-            <span className="flex items-center space-x-1 text-slate-400">
-              <Cpu className="w-3.5 h-3.5 text-blue-400" />
-              <span>Gateway:</span>
-            </span>
-            {isGatewayOnline ? (
-              <span className="flex items-center space-x-1 text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Live Connected</span>
-              </span>
-            ) : (
-              <span className="flex items-center space-x-1 text-amber-400/90">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                <span>Offline (Mock Fallback)</span>
-              </span>
+          {/* User Profile & Navigation */}
+          <div className="flex items-center space-x-4">
+            {/* Admin Portal Switcher (Only visible to Admin) */}
+            {isAdmin && (
+              <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <button
+                  onClick={() => setActivePortal('officer')}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                    activePortal === 'officer'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Officer Console
+                </button>
+                <button
+                  onClick={() => setActivePortal('applicant')}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                    activePortal === 'applicant'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Applicant Portal
+                </button>
+              </div>
             )}
-            <span className="text-slate-600">•</span>
-            <span className={isGatewayOnline ? 'text-emerald-400' : 'text-slate-400'}>
-              AI Trust Engine: {isGatewayOnline ? 'Active' : 'Standby'}
-            </span>
-          </div>
 
-          {/* Dual Portal Switcher Tabs */}
-          <div className="flex items-center space-x-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setActivePortal('applicant')}
-              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activePortal === 'applicant'
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Applicant Portal</span>
-            </button>
+            {/* User Profile Badge */}
+            {currentUser && (
+              <div className="flex items-center space-x-3 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                <div className="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center text-blue-400">
+                  {isOfficer ? (
+                    <UserCheck className="w-4 h-4" />
+                  ) : (
+                    <Building2 className="w-4 h-4" />
+                  )}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <div className="text-xs font-semibold text-slate-200 leading-tight">
+                    {currentUser.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono flex items-center space-x-1">
+                    <span className="uppercase text-blue-400 font-medium">
+                      {currentUser.role === 'OFFICER' ? 'Scrutiny Officer' : 'Institution'}
+                    </span>
+                    {currentUser.aictePermanentId && (
+                      <span>• ID: {currentUser.aictePermanentId}</span>
+                    )}
+                  </div>
+                </div>
 
-            <button
-              onClick={() => setActivePortal('officer')}
-              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activePortal === 'officer'
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Officer Console</span>
-            </button>
+                {/* Logout Button */}
+                <button
+                  onClick={onLogout}
+                  title="Sign out of e-Pramaan"
+                  className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors ml-1"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

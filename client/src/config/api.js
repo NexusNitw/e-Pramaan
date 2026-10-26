@@ -48,6 +48,8 @@ const CATEGORY_DOC_TYPE_MAP = {
   building_plan: 'BUILDING_PLAN_APPROVAL',
   affiliation_letter: 'UNIVERSITY_AFFILIATION_LETTER',
   faculty_roster: 'FACULTY_MASTER_ROSTER',
+  land_deed: 'LAND_TITLE_DEED',
+  land_title_deed: 'LAND_TITLE_DEED',
   infra_photo: 'INFRASTRUCTURE_PHOTO',
 };
 
@@ -104,9 +106,13 @@ export async function checkSystemHealth() {
  * Apply officer override or decision remark to dossier in MongoDB Atlas.
  */
 export async function submitOfficerRemark(applicationId, payload) {
+  const token = localStorage.getItem('epramaan_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE_URL}/api/applications/${applicationId}/remarks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -114,3 +120,81 @@ export async function submitOfficerRemark(applicationId, payload) {
   }
   return await res.json();
 }
+
+/**
+ * Authentication: Login with email & password.
+ */
+export async function loginUser(email, password) {
+  const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Login failed.');
+  }
+  return data;
+}
+
+/**
+ * Authentication: Register new user.
+ */
+export async function registerUser(userData) {
+  const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Registration failed.');
+  }
+  return data;
+}
+
+/**
+ * Authentication: Fetch current profile using stored JWT token.
+ */
+export async function fetchCurrentUser() {
+  const token = localStorage.getItem('epramaan_token');
+  if (!token) return null;
+
+  const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    localStorage.removeItem('epramaan_token');
+    localStorage.removeItem('epramaan_user');
+    return null;
+  }
+  return await res.json();
+}
+
+/**
+ * Export official AICTE Scrutiny Summary Report as a downloadable PDF file.
+ */
+export async function downloadScrutinyReportPdf(applicationId, applicationNumber = 'Dossier') {
+  const token = localStorage.getItem('epramaan_token');
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}/api/scrutiny/application/${applicationId}/export-pdf`, {
+    headers,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to export PDF: ${res.status} ${res.statusText}`);
+  }
+
+  const blob = await res.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `AICTE_Scrutiny_Report_${applicationNumber}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(downloadUrl);
+}
+

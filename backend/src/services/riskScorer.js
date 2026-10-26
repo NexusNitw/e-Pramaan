@@ -70,15 +70,18 @@ class RiskScorer {
     // Hard ceiling trigger: If critical tampering exists, floor at 75-90
     if (criticalFlags.length > 0 && (intakeFailed || hasTamperSoftware || isDuplicate || ghostFacultyFailed)) {
       compositeIndex = Math.max(compositeIndex, 82.5);
+    } else if (failedRules.length === 0 && !hasTamperSoftware && !intakeFailed) {
+      // Clean compliant application with 0 rule violations
+      compositeIndex = Math.min(compositeIndex, 8.5);
     }
 
     compositeIndex = parseFloat(Math.min(100, Math.max(0, compositeIndex)).toFixed(1));
 
     // 5. Determine Triage Status
     let triageStatus = 'GREEN_COMPLIANT';
-    if (compositeIndex >= 65 || criticalFlags.length > 0 && (intakeFailed || hasTamperSoftware || isDuplicate || ghostFacultyFailed)) {
+    if (compositeIndex >= 65 || (criticalFlags.length > 0 && (intakeFailed || hasTamperSoftware || isDuplicate || ghostFacultyFailed))) {
       triageStatus = 'RED_HIGH_RISK_FORGERY';
-    } else if (compositeIndex >= 25 || failedRules.length > 0) {
+    } else if (compositeIndex >= 30 || failedRules.length > 0 || trustRailData.externalRegistryStatus === 'MISMATCH') {
       triageStatus = 'YELLOW_DEFICIENCY';
     }
 

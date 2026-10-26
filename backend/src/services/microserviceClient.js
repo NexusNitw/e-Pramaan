@@ -71,6 +71,22 @@ class MicroserviceClient {
   }
 
   /**
+   * Calls Member 2 OCR Microservice to extract tabular faculty roster.
+   */
+  async extractFacultyTables(fileBuffer, filename) {
+    try {
+      const formData = new FormData();
+      const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+      formData.append('file', blob, filename);
+
+      return await this._postFormData(`${this.ocrUrl}/api/ocr/extract/tables`, formData);
+    } catch (error) {
+      console.warn(`[MicroserviceClient] OCR extract tables offline, using empty roster for '${filename}': ${error.message}`);
+      return { faculty_roster: [], success: false };
+    }
+  }
+
+  /**
    * Calls Member 1 Forensics Microservice for ELA and metadata analysis.
    */
   async analyzeForensics(fileBuffer, filename) {
@@ -122,125 +138,100 @@ class MicroserviceClient {
     }
   }
 
-  // --- Resilient Simulation Fallbacks (Active during standalone development) ---
+  // --- Safe Fallbacks (When service endpoints are offline or processing fails) ---
 
   _simulateOCRClassification(filename) {
-    const fn = filename.toLowerCase();
-    let type = 'OTHER';
-    if (fn.includes('fire')) type = 'FIRE_SAFETY_NOC';
-    else if (fn.includes('affil')) type = 'UNIVERSITY_AFFILIATION_LETTER';
-    else if (fn.includes('land') || fn.includes('deed')) type = 'LAND_TITLE_DEED';
-    else if (fn.includes('roster') || fn.includes('faculty')) type = 'FACULTY_MASTER_ROSTER';
-    else if (fn.includes('photo') || fn.includes('lab')) type = 'INFRASTRUCTURE_PHOTO';
-
     return {
       filename,
       total_pages: 1,
-      primary_document_type: type,
-      overall_confidence: 0.94,
-      processing_time_ms: 120.0,
-      success: true,
+      primary_document_type: 'OTHER',
+      overall_confidence: 0.15,
+      processing_time_ms: 10.0,
+      success: false,
     };
   }
 
   _simulateCertificateExtraction(filename, docType) {
-    const isTampered = filename.toLowerCase().includes('tampered');
     return {
       filename,
-      document_type: docType,
-      attributes: {
-        document_number: 'NOC-2026-MH-0892',
-        issuing_authority: 'Statutory Competent Authority',
-        issue_date: '2026-01-15',
-        expiry_date: filename.toLowerCase().includes('expired') ? '2025-03-09' : '2027-01-14',
-        sanctioned_intake: isTampered ? 300 : 180,
-        builtUpAreaSqm: 14200,
-        survey_numbers: ['42/1A', '42/2B'],
-      },
-      confidence: 0.91,
-      processing_time_ms: 145.0,
-      success: true,
+      document_type: docType || 'OTHER',
+      attributes: {},
+      confidence: 0.0,
+      processing_time_ms: 10.0,
+      success: false,
     };
   }
 
   _simulateForensicAnalysis(filename) {
-    const isTampered = filename.toLowerCase().includes('tampered');
     return {
       filename,
-      composite_tamper_flag: isTampered,
-      composite_forensic_score: isTampered ? 84.5 : 6.2,
+      composite_tamper_flag: false,
+      composite_forensic_score: 0.0,
       ela_analysis: {
-        anomaly_score: isTampered ? 84.2 : 6.2,
-        is_tampered: isTampered,
-        mean_error: isTampered ? 18.4 : 2.1,
-        max_error: isTampered ? 245.0 : 42.0,
-        confidence_rating: isTampered ? 'HIGH_FORGERY' : 'CLEAN',
+        anomaly_score: 0.0,
+        is_tampered: false,
+        mean_error: 0.0,
+        max_error: 0.0,
+        confidence_rating: 'UNPROCESSED',
+        heatmap_base64: '',
       },
       metadata_analysis: {
-        is_tampered_software: isTampered,
-        detected_editing_tools: isTampered ? ['Adobe Photoshop CC 2023'] : [],
-        timestamp_discrepancy: isTampered,
+        is_tampered_software: false,
+        detected_editing_tools: [],
+        timestamp_discrepancy: false,
       },
-      processing_time_ms: 180.0,
-      success: true,
+      processing_time_ms: 10.0,
+      success: false,
     };
   }
 
   _simulateFacilityAudit(filename, campusLat, campusLon) {
-    const isOffCampus = filename.toLowerCase().includes('duplicate') || filename.toLowerCase().includes('offcampus');
     return {
       filename,
-      facility_category: 'Physics Laboratory',
-      is_flagged: isOffCampus,
-      composite_facility_risk: isOffCampus ? 88.0 : 5.0,
+      facility_category: 'Unverified Facility',
+      is_flagged: false,
+      composite_facility_risk: 0.0,
       geotag_check: {
-        has_gps: true,
-        distance_meters: isOffCampus ? 62400.0 : 45.0,
-        is_within_bounds: !isOffCampus,
-        status: isOffCampus ? 'OFF_CAMPUS_VIOLATION' : 'WITHIN_CAMPUS',
+        has_gps: false,
+        distance_meters: 0.0,
+        is_within_bounds: false,
+        status: 'NO_GPS_DATA',
       },
       phash_check: {
-        phash: 'bf82d921a8f01c34',
-        is_duplicate: isOffCampus,
-        similarity_percentage: isOffCampus ? 100.0 : 0.0,
-        reused_facility_name: isOffCampus ? 'Advanced Physics Lab at Sri Krishna College' : null,
+        phash: '',
+        is_duplicate: false,
+        similarity_percentage: 0.0,
+        reused_facility_name: null,
       },
-      processing_time_ms: 160.0,
-      success: true,
+      processing_time_ms: 10.0,
+      success: false,
     };
   }
 
   _simulateTrustRails(filename, aicteId, requestedIntake) {
-    const isTampered = filename.toLowerCase().includes('tampered');
-    const isExpired = filename.toLowerCase().includes('expired');
-
     return {
       filename,
-      overall_trust_status: isTampered ? 'SUSPECTED_FORGERY' : isExpired ? 'WARNING_DEFICIENCY' : 'TRUSTED',
-      trust_confidence: 0.95,
+      overall_trust_status: 'UNVERIFIED',
+      trust_confidence: 0.0,
       pki_signature: {
-        is_signed: true,
-        is_valid: !isTampered,
-        signer_name: 'Registrar, State Technological University',
-        integrity_status: isTampered ? 'SIGNATURE_CORRUPTED' : 'VALID_UNMODIFIED',
+        is_signed: false,
+        is_valid: false,
+        signer_name: null,
+        integrity_status: 'UNSIGNED_OR_UNAVAILABLE',
       },
       qr_verification: {
-        qr_found: true,
-        matches_document: !isTampered,
+        qr_found: false,
+        matches_document: false,
       },
       external_registries: [
         {
-          registry_name: 'DigiLocker National Vault',
-          status: isExpired ? 'EXPIRED' : isTampered ? 'MISMATCH' : 'VERIFIED',
-          response_summary: isExpired
-            ? 'Certificate validity expired 3 months prior.'
-            : isTampered
-            ? 'Master intake record is 180 seats, mismatching requested 300 seats.'
-            : 'Verified against national document vault.',
+          registry_name: 'Issuing Authority / DigiLocker',
+          status: 'MANUAL_REVIEW_REQUIRED',
+          response_summary: 'Automated verification rail unavailable or document not registered with issuing authority.',
         },
       ],
-      processing_time_ms: 210.0,
-      success: true,
+      processing_time_ms: 10.0,
+      success: false,
     };
   }
 }

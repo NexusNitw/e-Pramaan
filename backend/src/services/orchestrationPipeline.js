@@ -1,3 +1,4 @@
+import fs from 'fs';
 import Application from '../models/Application.js';
 import Institution from '../models/Institution.js';
 import DocumentRecord from '../models/DocumentRecord.js';
@@ -31,12 +32,23 @@ class OrchestrationPipeline {
     );
 
     let maxForensicData = { elaAnomalyScore: 0, tamperDetected: false, metadataSoftware: [] };
-    let primaryTrustData = { pkiSignatureValid: true, qrPayloadMatchesDocument: true, externalRegistryStatus: 'VERIFIED' };
+    let primaryTrustData = { pkiSignatureValid: false, qrPayloadMatchesDocument: false, externalRegistryStatus: 'MANUAL_REVIEW_REQUIRED' };
 
     // 2. Process each attached DocumentRecord via Python microservices
     for (const doc of documents) {
-      let fileBuffer = Buffer.from(`%PDF-1.4 Simulated Document Payload for ${doc.fileName}`);
-      if (doc.storageUrl && doc.storageUrl.startsWith('http') && !doc.storageUrl.includes('mock-aicte-epranam')) {
+      let fileBuffer = null;
+
+      // First check if stored on local disk
+      if (doc.localFilePath && fs.existsSync(doc.localFilePath)) {
+        try {
+          fileBuffer = await fs.promises.readFile(doc.localFilePath);
+        } catch (fsErr) {
+          console.warn(`[OrchestrationPipeline] Could not read local file ${doc.localFilePath}: ${fsErr.message}`);
+        }
+      }
+
+      // Then fallback to remote storageUrl if needed
+      if (!fileBuffer && doc.storageUrl && doc.storageUrl.startsWith('http')) {
         try {
           const fileResp = await fetch(doc.storageUrl);
           if (fileResp.ok) {
@@ -47,31 +59,84 @@ class OrchestrationPipeline {
           console.warn(`[OrchestrationPipeline] Could not fetch document buffer from ${doc.storageUrl}, using fallback: ${fetchErr.message}`);
         }
       }
+
+      if (!fileBuffer) {
+        fileBuffer = Buffer.from(`%PDF-1.4 Empty Payload for ${doc.fileName}`);
+      }
+
       const filename = doc.fileName || 'document.pdf';
 
       // (a) Member 2 OCR Classification & Extraction
       const ocrClass = await microserviceClient.classifyDocument(fileBuffer, filename);
-      const ocrExtracted = await microserviceClient.extractCertificateData(fileBuffer, filename, ocrClass.primary_document_type);
-
       doc.documentType = ocrClass.primary_document_type || doc.documentType;
-      doc.extractedData = {
-        ...doc.extractedData,
-        ...ocrExtracted.attributes,
-      };
+
+      if (doc.documentType !== 'OTHER') {
+        const ocrExtracted = await microserviceClient.extractCertificateData(fileBuffer, filename, doc.documentType);
+        const attrs = ocrExtracted.attributes || {};
+
+        let facultyMembers = [];
+        if (doc.documentType === 'FACULTY_MASTER_ROSTER' || doc.documentType === 'FACULTY_ROSTER') {
+          const tableRes = await microserviceClient.extractFacultyTables(fileBuffer, filename);
+          facultyMembers = tableRes.faculty_roster || [];
+        }
+
+        const validFaculty = facultyMembers
+          .map((f, idx) => ({
+            name: (f.name && f.name.trim().length > 0) ? f.name.trim() : `Faculty Member ${idx + 1}`,
+            designation: f.designation || 'Assistant Professor',
+            department: f.department || 'Engineering & Technology',
+            dateOfJoining: f.date_of_joining ? new Date(f.date_of_joining) : new Date('2022-01-01'),
+            nationalIdHash: f.national_id_hash || '',
+            qualification: f.qualification || 'M.Tech',
+            isCrossCollegeFlagged: Boolean(f.is_cross_college_flagged),
+          }))
+          .filter(f => f.name && f.name.length > 0);
+
+        doc.extractedData = {
+          ...doc.extractedData,
+          documentNumber: attrs.document_number || doc.extractedData?.documentNumber || '',
+          issuingAuthority: attrs.issuing_authority || doc.extractedData?.issuingAuthority || '',
+          issueDate: attrs.issue_date ? new Date(attrs.issue_date) : doc.extractedData?.issueDate,
+          expiryDate: attrs.expiry_date ? new Date(attrs.expiry_date) : doc.extractedData?.expiryDate,
+          sanctionedIntake: attrs.sanctioned_intake ?? doc.extractedData?.sanctionedIntake,
+          builtUpAreaSqm: attrs.builtUpAreaSqm ?? attrs.built_up_area_sqm ?? doc.extractedData?.builtUpAreaSqm,
+          surveyNumbers: attrs.survey_numbers || doc.extractedData?.surveyNumbers || [],
+          facultyList: validFaculty.length > 0 ? validFaculty : (doc.extractedData?.facultyList || []),
+          rawKeyValues: attrs.raw_key_values || {},
+        };
+      } else {
+        doc.extractedData = {
+          documentNumber: '',
+          issuingAuthority: '',
+          builtUpAreaSqm: null,
+          sanctionedIntake: null,
+          surveyNumbers: [],
+          facultyList: [],
+        };
+        await auditLogger.recordEvent(
+          application._id,
+          'COMPLIANCE_DEFICIENCY_DETECTED',
+          { userId: 'AICTE_CLASSIFIER', role: 'OCR_SERVICE' },
+          { fileName: doc.fileName, reason: 'Uploaded file does not match any prescribed AICTE statutory regulatory category.' }
+        );
+      }
 
       // (b) Member 1 Forensics: ELA & Metadata
       const forensicRes = await microserviceClient.analyzeForensics(fileBuffer, filename);
-      doc.forensicAnalysis.elaAnomalyScore = forensicRes.ela_analysis.anomaly_score;
-      doc.forensicAnalysis.tamperDetected = forensicRes.composite_tamper_flag;
-      doc.forensicAnalysis.metadataSoftware = forensicRes.metadata_analysis.detected_editing_tools;
-      doc.forensicAnalysis.exifDiscrepancy = forensicRes.metadata_analysis.timestamp_discrepancy;
+      doc.forensicAnalysis.elaAnomalyScore = forensicRes.ela_analysis?.anomaly_score || 0;
+      doc.forensicAnalysis.tamperDetected = forensicRes.composite_tamper_flag || false;
+      doc.forensicAnalysis.metadataSoftware = forensicRes.metadata_analysis?.detected_editing_tools || [];
+      doc.forensicAnalysis.exifDiscrepancy = forensicRes.metadata_analysis?.timestamp_discrepancy || false;
+      if (forensicRes.ela_analysis?.heatmap_base64) {
+        doc.forensicAnalysis.heatmapImageUrl = forensicRes.ela_analysis.heatmap_base64;
+      }
 
       if (forensicRes.composite_tamper_flag) {
         await auditLogger.recordEvent(
           application._id,
           'FORENSIC_TAMPER_FLAGGED',
           { userId: 'MEMBER_1_FORENSICS_WORKER', role: 'CV_MICROSERVICE' },
-          { fileName: doc.fileName, anomalyScore: forensicRes.ela_analysis.anomaly_score, software: forensicRes.metadata_analysis.detected_editing_tools }
+          { fileName: doc.fileName, anomalyScore: forensicRes.ela_analysis?.anomaly_score, software: forensicRes.metadata_analysis?.detected_editing_tools }
         );
       }
 
@@ -83,13 +148,13 @@ class OrchestrationPipeline {
           institution.geoCoordinates?.latitude || 18.5204,
           institution.geoCoordinates?.longitude || 73.8567
         );
-        doc.forensicAnalysis.pHash = facilityAudit.phash_check.phash;
-        doc.forensicAnalysis.isDuplicatePhoto = facilityAudit.phash_check.is_duplicate;
+        doc.forensicAnalysis.pHash = facilityAudit.phash_check?.phash || '';
+        doc.forensicAnalysis.isDuplicatePhoto = facilityAudit.phash_check?.is_duplicate || false;
         doc.forensicAnalysis.geoExif = {
-          latitude: facilityAudit.geotag_check.photo_coordinates?.latitude,
-          longitude: facilityAudit.geotag_check.photo_coordinates?.longitude,
-          distanceFromCampusMeters: facilityAudit.geotag_check.distance_meters,
-          isWithinCampusBounds: facilityAudit.geotag_check.is_within_bounds,
+          latitude: facilityAudit.geotag_check?.photo_coordinates?.latitude,
+          longitude: facilityAudit.geotag_check?.photo_coordinates?.longitude,
+          distanceFromCampusMeters: facilityAudit.geotag_check?.distance_meters,
+          isWithinCampusBounds: facilityAudit.geotag_check?.is_within_bounds,
         };
       }
 
@@ -101,10 +166,10 @@ class OrchestrationPipeline {
         application.requestedIntake
       );
 
-      doc.verificationRails.pkiSignatureValid = trustRes.pki_signature.is_valid;
-      doc.verificationRails.pkiSignerName = trustRes.pki_signature.signer_name;
-      doc.verificationRails.qrPayloadMatchesDocument = trustRes.qr_verification.matches_document;
-      doc.verificationRails.externalRegistryStatus = trustRes.external_registries[0]?.status || 'VERIFIED';
+      doc.verificationRails.pkiSignatureValid = Boolean(trustRes.pki_signature?.is_valid);
+      doc.verificationRails.pkiSignerName = trustRes.pki_signature?.signer_name || null;
+      doc.verificationRails.qrPayloadMatchesDocument = Boolean(trustRes.qr_verification?.matches_document);
+      doc.verificationRails.externalRegistryStatus = trustRes.external_registries?.[0]?.status || (doc.documentType === 'OTHER' ? 'UNRECOGNIZED_DOCUMENT' : 'MANUAL_REVIEW_REQUIRED');
       doc.status = 'ANALYZED';
 
       await doc.save();

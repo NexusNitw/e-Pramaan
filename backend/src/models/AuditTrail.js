@@ -27,6 +27,7 @@ const AuditTrailSchema = new mongoose.Schema(
         'PKI_SIGNATURE_VERIFIED',
         'APH_RULES_EVALUATED',
         'RISK_SCORE_COMPUTED',
+        'COMPLIANCE_DEFICIENCY_DETECTED',
         'OFFICER_OVERRIDE_APPLIED',
         'FINAL_APPROVAL_GRANTED',
         'APPLICATION_REJECTED',

@@ -1,9 +1,11 @@
 import path from 'path';
+import fs from 'fs';
 import crypto from 'crypto';
 import DocumentRecord from '../models/DocumentRecord.js';
 import Application from '../models/Application.js';
 import Institution from '../models/Institution.js';
 import { uploadBufferToCloudinary, deleteFromCloudinary } from '../config/cloudinary.js';
+import config from '../config/env.js';
 
 /**
  * Upload a document (PDF / Image) to Cloudinary and register in DocumentRecord.
@@ -37,7 +39,16 @@ export const uploadDocument = async (req, res, next) => {
       ? `aicte-epranam/applications/${applicationId}`
       : 'aicte-epranam/temp_uploads';
 
-    // 3. Stream buffer directly to Cloudinary with explicit extension
+    // 3. Persist local copy on server disk so microservices can always inspect real raw bytes
+    const uploadsDir = path.resolve(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    const localFileName = `${cleanBaseName}_${Date.now()}${extension}`;
+    const localFilePath = path.join(uploadsDir, localFileName);
+    fs.writeFileSync(localFilePath, req.file.buffer);
+
+    // 4. Stream buffer to Cloudinary
     let cloudinaryResult;
     try {
       cloudinaryResult = await uploadBufferToCloudinary(req.file.buffer, {
@@ -46,21 +57,16 @@ export const uploadDocument = async (req, res, next) => {
         resource_type: resourceType,
       });
     } catch (cloudErr) {
-      // In development, if Cloudinary credentials are not configured, allow fallback with mock URL
-      if (cloudErr.message.includes('Cloudinary is not configured')) {
-        console.warn(`[Cloudinary Warning] ${cloudErr.message} - Falling back to local mock storage URL.`);
-        cloudinaryResult = {
-          secure_url: `https://res.cloudinary.com/mock-aicte-epranam/raw/upload/${cleanBaseName}_${Date.now()}.pdf`,
-          public_id: `mock_${cleanBaseName}_${Date.now()}`,
-          bytes: req.file.size,
-          format: isPdf ? 'pdf' : req.file.mimetype.split('/')[1] || 'bin',
-        };
-      } else {
-        throw cloudErr;
-      }
+      console.warn(`[Cloudinary Warning] ${cloudErr.message} - Using local static upload URL.`);
+      cloudinaryResult = {
+        secure_url: `http://localhost:${config.port}/uploads/${localFileName}`,
+        public_id: `local_${cleanBaseName}_${Date.now()}`,
+        bytes: req.file.size,
+        format: isPdf ? 'pdf' : req.file.mimetype.split('/')[1] || 'bin',
+      };
     }
 
-    // 4. Normalize document type to canonical schema enum
+    // 5. Normalize document type to canonical schema enum
     const normalizeDocType = (type) => {
       if (!type) return 'OTHER';
       const clean = String(type).trim().toUpperCase();
@@ -75,6 +81,7 @@ export const uploadDocument = async (req, res, next) => {
         FACULTY_MASTER_ROSTER: 'FACULTY_MASTER_ROSTER',
         INFRA_PHOTO: 'INFRASTRUCTURE_PHOTO',
         INFRASTRUCTURE_PHOTO: 'INFRASTRUCTURE_PHOTO',
+        LAND_DEED: 'LAND_TITLE_DEED',
         LAND_TITLE_DEED: 'LAND_TITLE_DEED',
       };
       return map[clean] || 'OTHER';
@@ -82,7 +89,7 @@ export const uploadDocument = async (req, res, next) => {
 
     const canonicalDocType = normalizeDocType(documentType);
 
-    // 5. If applicationId provided, create and link DocumentRecord in MongoDB
+    // 6. If applicationId provided, create and link DocumentRecord in MongoDB
     let savedRecord = null;
     if (applicationId) {
       const appExists = await Application.findById(applicationId);
@@ -96,6 +103,7 @@ export const uploadDocument = async (req, res, next) => {
           fileName: rawFileName,
           fileHashSha256,
           storageUrl: cloudinaryResult.secure_url,
+          localFilePath,
           fileSizeBytes: req.file.size,
           mimeType: req.file.mimetype,
           status: 'UPLOADED',

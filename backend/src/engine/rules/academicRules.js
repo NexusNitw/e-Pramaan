@@ -17,8 +17,9 @@ export const evaluateAcademicRules = (application, institution, documents) => {
   // Standard APH threshold: Engineering/Tech = 1:15, Pharmacy = 1:15, Management = 1:20
   const maxAllowedRatio = category === 'MANAGEMENT' ? 20 : 15;
 
-  // RULE 1: Student-Faculty Ratio Check
-  const { ratio, formatted } = calculateSFR(totalStudents, facultyCount);
+  // RULE 1: Student-Faculty Ratio Check (based on annual intake or program batch enrollment)
+  const effectiveStudents = application.requestedIntake || (application.totalStudentEnrolled ? Math.round(application.totalStudentEnrolled / 4) : 360);
+  const { ratio, formatted } = calculateSFR(effectiveStudents, facultyCount);
   const sfrPassed = ratio <= maxAllowedRatio && ratio > 0;
 
   results.push({

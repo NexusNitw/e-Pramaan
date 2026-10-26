@@ -34,13 +34,29 @@ export const evaluateApplicationCompliance = async (applicationId) => {
     ...intakeResults,
   ];
 
+  // Flag any uploaded documents classified as OTHER (unrelated/unrecognized)
+  const otherDocs = documents.filter((d) => d.documentType === 'OTHER');
+  for (const od of otherDocs) {
+    allResults.push({
+      ruleCode: 'APH_DOC_VALIDITY_01',
+      category: 'DOCUMENT_AUTHENTICITY',
+      title: 'Valid Statutory Regulatory Document Upload',
+      passed: false,
+      severity: 'CRITICAL',
+      observedValue: `INVALID / UNRELATED: ${od.fileName}`,
+      requiredValue: 'Recognized AICTE statutory certificate (NOC, Affiliation, Roster, Deed)',
+      message: `Uploaded file '${od.fileName}' was analyzed via OCR taxonomy and classified as an unrecognized or unrelated document. Does not fulfill statutory approval requirements.`,
+      penaltyScore: 35,
+    });
+  }
+
   // Calculate cumulative penalty
   const totalPenalty = allResults.reduce((acc, curr) => acc + (curr.penaltyScore || 0), 0);
   const compositeScore = Math.min(100, totalPenalty);
 
   // Determine Triage Category
   const hasCriticalFailure = allResults.some(
-    (r) => !r.passed && r.severity === 'CRITICAL' && (r.ruleCode === 'APH_INTAKE_SANCTION_01' || r.ruleCode === 'APH_FACULTY_GHOST_01')
+    (r) => !r.passed && r.severity === 'CRITICAL'
   );
   const hasDeficiency = allResults.some((r) => !r.passed);
 

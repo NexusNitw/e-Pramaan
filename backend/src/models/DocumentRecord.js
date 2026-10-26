@@ -51,6 +51,7 @@ const DocumentRecordSchema = new mongoose.Schema(
     fileName: { type: String, required: true },
     fileHashSha256: { type: String, required: true },
     storageUrl: { type: String, required: true },
+    localFilePath: { type: String },
     fileSizeBytes: { type: Number, default: 0 },
     pageCount: { type: Number, default: 1 },
     mimeType: { type: String, default: 'application/pdf' },

@@ -1,21 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from './components/layout/Navbar';
+import LoginPage from './components/auth/LoginPage';
 import UploadWizard from './components/applicant/UploadWizard';
 import ScrutinyConsole from './components/officer/ScrutinyConsole';
 import SplitScreenViewer from './components/officer/SplitScreenViewer';
-import { mockApplications } from './mockData';
 import { fetchApplications } from './config/api';
 
 export default function App() {
-  const [activePortal, setActivePortal] = useState('officer'); // 'applicant' | 'officer'
-  const [applications, setApplications] = useState(mockApplications);
+  // Initialize authenticated user from localStorage if present
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('epramaan_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [activePortal, setActivePortal] = useState(() => {
+    if (!currentUser) return 'officer';
+    return currentUser.role === 'APPLICANT' ? 'applicant' : 'officer';
+  });
+
+  const [applications, setApplications] = useState([]);
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
 
   const loadApplications = useCallback(async () => {
     try {
       const response = await fetchApplications();
-      if (response && response.data && response.data.length > 0) {
+      if (response && response.data) {
         setApplications(response.data);
         setIsLiveConnected(true);
       }
@@ -26,8 +40,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadApplications();
-  }, [loadApplications]);
+    if (currentUser) {
+      loadApplications();
+    }
+  }, [currentUser, loadApplications]);
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    const targetPortal = user.role === 'APPLICANT' ? 'applicant' : 'officer';
+    setActivePortal(targetPortal);
+    setSelectedApplication(null);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('epramaan_token');
+    localStorage.removeItem('epramaan_user');
+    setCurrentUser(null);
+    setSelectedApplication(null);
+  };
 
   const handleSelectApplication = (app) => {
     setSelectedApplication(app);
@@ -39,30 +69,48 @@ export default function App() {
 
   const handleSubmissionComplete = async (newTrackingId, createdApp) => {
     await loadApplications();
-    setActivePortal('officer');
-    if (createdApp) {
-      setSelectedApplication(createdApp);
-    } else {
-      setSelectedApplication(applications[0]);
+    // For applicant, we can keep them in the upload wizard or show submission confirmation
+    if (currentUser?.role === 'OFFICER' || currentUser?.role === 'ADMIN') {
+      setActivePortal('officer');
+      if (createdApp) {
+        setSelectedApplication(createdApp);
+      } else {
+        setSelectedApplication(applications[0]);
+      }
     }
   };
+
+  // If user is not authenticated, show regulatory login page
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // Determine authorized portal view based on role
+  const isOfficerOrAdmin = currentUser.role === 'OFFICER' || currentUser.role === 'ADMIN';
+  const isApplicant = currentUser.role === 'APPLICANT';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <Navbar
+        currentUser={currentUser}
         activePortal={activePortal}
         setActivePortal={(portal) => {
+          // Prevent applicants from switching to officer console
+          if (portal === 'officer' && !isOfficerOrAdmin) return;
           setActivePortal(portal);
-          setSelectedApplication(null); // Reset detail view when switching portals
+          setSelectedApplication(null);
         }}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1">
-        {activePortal === 'applicant' && (
+        {/* Applicant View */}
+        {(activePortal === 'applicant' || isApplicant) && activePortal !== 'officer' && (
           <UploadWizard onSubmissionComplete={handleSubmissionComplete} />
         )}
 
-        {activePortal === 'officer' && (
+        {/* Officer Scrutiny Console & Inspector */}
+        {isOfficerOrAdmin && activePortal === 'officer' && (
           <>
             {selectedApplication ? (
               <SplitScreenViewer

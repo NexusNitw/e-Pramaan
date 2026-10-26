@@ -42,21 +42,22 @@ export const evaluateSafetyRules = (application, institution, documents) => {
     });
   }
 
-  // RULE 2: Building Plan Sanction Check
+  // RULE 2: Building Plan / Land Title Sanction Check
   const planDoc = documents.find((d) => d.documentType === 'BUILDING_PLAN_APPROVAL');
-  const planPassed = Boolean(planDoc);
+  const landDoc = documents.find((d) => d.documentType === 'LAND_TITLE_DEED');
+  const planPassed = Boolean(planDoc || landDoc);
 
   results.push({
     ruleCode: 'APH_SAFETY_BUILDING_01',
     category: 'SAFETY_MANDATE',
-    title: 'Competent Authority Building Plan Sanction',
+    title: 'Competent Authority Building Plan / Land Title Sanction',
     passed: planPassed,
     severity: 'MAJOR',
     observedValue: planPassed ? 'PRESENT & ATTACHED' : 'MISSING',
-    requiredValue: 'Approved architectural drawings by Town Planning / Municipal Body',
+    requiredValue: 'Approved architectural drawings or registered Land Title Deed',
     message: planPassed
-      ? 'Approved building plan drawings submitted.'
-      : 'Building plan approval document is missing from application dossier.',
+      ? 'Statutory building plan or registered land title deed submitted.'
+      : 'Building plan approval and land title deed are missing from application dossier.',
     penaltyScore: planPassed ? 0 : 15,
   });
 
