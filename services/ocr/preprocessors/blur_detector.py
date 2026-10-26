@@ -11,6 +11,7 @@ class LaplacianBlurDetector:
     """
     Ingestion barrier QA engine computing the variance of the discrete Laplacian kernel
     over uploaded document pages to reject blurred, defocused, or illegible submissions.
+    Calculation is performed purely on pixel matrices without filename heuristics.
     """
 
     def __init__(self, threshold: float = 75.0):
@@ -25,25 +26,27 @@ class LaplacianBlurDetector:
 
     def analyze_image_bytes(self, image_bytes: bytes, filename: str = "") -> BlurCheckResult:
         """
-        Calculates Laplacian variance from raw image bytes.
+        Calculates Laplacian variance from raw image or rendered PDF bytes.
         """
-        # For demonstration edge-case test files explicitly marked as blurry
-        if "blurry" in filename.lower() or "unreadable" in filename.lower():
-            return BlurCheckResult(
-                laplacian_variance=38.4,
-                threshold=self.threshold,
-                is_blurry=True,
-                legibility_rating="UNREADABLE_BLURRY",
-            )
-
         try:
+            # Handle PDF bytes if passed
+            if image_bytes[:4] == b"%PDF":
+                try:
+                    import fitz
+                    doc = fitz.open(stream=image_bytes, filetype="pdf")
+                    if len(doc) > 0:
+                        pix = doc[0].get_pixmap(dpi=150)
+                        image_bytes = pix.tobytes("png")
+                    doc.close()
+                except Exception as pdf_err:
+                    logger.debug(f"Could not render PDF for blur check: {pdf_err}")
+
             with Image.open(io.BytesIO(image_bytes)) as img:
                 # 1. Convert to grayscale
                 gray = img.convert("L")
                 arr = np.array(gray, dtype=np.float32)
 
                 # 2. Convolve with Laplacian kernel using vectorized slicing
-                # (Equivalent to 2D convolution for edge enhancement)
                 laplacian_map = (
                     arr[:-2, 1:-1]
                     + arr[2:, 1:-1]

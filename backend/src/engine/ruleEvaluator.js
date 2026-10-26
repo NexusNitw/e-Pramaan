@@ -1,6 +1,7 @@
 import Application from '../models/Application.js';
 import Institution from '../models/Institution.js';
 import DocumentRecord from '../models/DocumentRecord.js';
+import ComplianceRule from '../models/ComplianceRule.js';
 import { evaluateAcademicRules } from './rules/academicRules.js';
 import { evaluateInfrastructureRules } from './rules/infrastructureRules.js';
 import { evaluateSafetyRules } from './rules/safetyRules.js';
@@ -8,6 +9,7 @@ import { evaluateIntakeAndFacultyRules } from './rules/intakeRules.js';
 
 /**
  * Deterministic APH Handbook Rule Engine evaluating multi-document compliance.
+ * Dynamically queries ComplianceRule models from MongoDB to apply configured penalties.
  */
 export const evaluateApplicationCompliance = async (applicationId) => {
   const application = await Application.findById(applicationId)
@@ -25,7 +27,7 @@ export const evaluateApplicationCompliance = async (applicationId) => {
   const academicResults = evaluateAcademicRules(application, institution, documents);
   const infraResults = evaluateInfrastructureRules(application, institution, documents);
   const safetyResults = evaluateSafetyRules(application, institution, documents);
-  const intakeResults = evaluateIntakeAndFacultyRules(application, institution, documents);
+  const intakeResults = await evaluateIntakeAndFacultyRules(application, institution, documents);
 
   const allResults = [
     ...academicResults,
@@ -48,6 +50,27 @@ export const evaluateApplicationCompliance = async (applicationId) => {
       message: `Uploaded file '${od.fileName}' was analyzed via OCR taxonomy and classified as an unrecognized or unrelated document. Does not fulfill statutory approval requirements.`,
       penaltyScore: 35,
     });
+  }
+
+  // Load active regulatory rules from MongoDB to apply dynamic penalty weights
+  try {
+    const dbRules = await ComplianceRule.find({ isActive: true });
+    if (dbRules && dbRules.length > 0) {
+      const dbRuleMap = new Map(dbRules.map((r) => [r.ruleCode, r]));
+      for (const res of allResults) {
+        if (!res.passed && dbRuleMap.has(res.ruleCode)) {
+          const matched = dbRuleMap.get(res.ruleCode);
+          if (typeof matched.penaltyWeight === 'number') {
+            res.penaltyScore = matched.penaltyWeight;
+          }
+          if (matched.severity) {
+            res.severity = matched.severity;
+          }
+        }
+      }
+    }
+  } catch (dbErr) {
+    console.debug(`[RuleEvaluator] Using default hardcoded rule weights: ${dbErr.message}`);
   }
 
   // Calculate cumulative penalty

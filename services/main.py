@@ -83,7 +83,7 @@ async def root_index():
         "documentation": "/docs",
         "endpoints": {
             "forensics_analysis": "/api/forensics/analyze",
-            "facility_audit": "/api/forensics/facility-audit",
+            "facility_audit": "/api/forensics/facility/audit",
             "typography_check": "/api/forensics/typography/analyze",
             "ocr_classify": "/api/ocr/classify",
             "ocr_extract": "/api/ocr/extract",

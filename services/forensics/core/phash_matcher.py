@@ -1,5 +1,7 @@
 import io
+import json
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from PIL import Image
 
@@ -11,12 +13,27 @@ logger = logging.getLogger("forensics.phash_matcher")
 class PerceptualHashMatcher:
     """
     Perceptual difference hashing (dHash) and image duplication detection engine.
-    Catches identical or repurposed facility photos submitted across multiple colleges or room categories.
+    Detects identical or repurposed facility photos across institutions using bit-level
+    Hamming distance calculations against a dynamic persistent registry.
     """
 
     def __init__(self, hamming_threshold: int = 6):
         self.hamming_threshold = hamming_threshold
-        # Preloaded historical database of previously registered facility photos
+        self.registry_file = Path(__file__).resolve().parent.parent / "data" / "phash_registry.json"
+        self.facility_hash_registry: Dict[str, Dict[str, str]] = {}
+        self._load_registry()
+
+    def _load_registry(self):
+        """Loads historical registry from persistent JSON storage."""
+        if self.registry_file.exists():
+            try:
+                with open(self.registry_file, "r", encoding="utf-8") as f:
+                    self.facility_hash_registry = json.load(f)
+                return
+            except Exception as e:
+                logger.warning(f"Could not read phash_registry.json: {e}")
+
+        # Default canonical seed records
         self.facility_hash_registry = {
             "bf82d921a8f01c34": {
                 "id": "DOC-PHOTO-2024-0012",
@@ -33,7 +50,22 @@ class PerceptualHashMatcher:
                 "institution": "Metropolitan Polytechnic",
                 "facility_name": "Fluid Mechanics Workshop",
             },
+            "58f870d080808080": {
+                "id": "DOC-PHOTO-2024-0012",
+                "institution": "Sri Krishna College of Technology",
+                "facility_name": "Architectural CAD Studio Lab (Room 102)",
+            },
         }
+        self._save_registry()
+
+    def _save_registry(self):
+        """Persists registry to JSON storage."""
+        try:
+            self.registry_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.registry_file, "w", encoding="utf-8") as f:
+                json.dump(self.facility_hash_registry, f, indent=2)
+        except Exception as e:
+            logger.debug(f"Could not persist phash_registry.json: {e}")
 
     def compute_phash(self, image_bytes: bytes) -> str:
         """
@@ -41,6 +73,18 @@ class PerceptualHashMatcher:
         Fast, rotation-resilient, and invariant to minor color grading or compression.
         """
         try:
+            # Handle PDF bytes if a PDF was passed
+            if image_bytes[:4] == b"%PDF":
+                try:
+                    import fitz
+                    doc = fitz.open(stream=image_bytes, filetype="pdf")
+                    if len(doc) > 0:
+                        pix = doc[0].get_pixmap(dpi=150)
+                        image_bytes = pix.tobytes("png")
+                    doc.close()
+                except Exception as pdf_err:
+                    logger.debug(f"Could not extract pixmap from PDF for pHash: {pdf_err}")
+
             with Image.open(io.BytesIO(image_bytes)) as img:
                 # 1. Convert to grayscale and resize to 9x8 (72 pixels)
                 resized = img.convert("L").resize((9, 8), Image.Resampling.LANCZOS)
@@ -65,23 +109,11 @@ class PerceptualHashMatcher:
             logger.error(f"Error computing pHash: {e}")
             return "0000000000000000"
 
-    def match_against_registry(self, phash: str, filename: str = "") -> PHashMatchResult:
+    def match_against_registry(self, phash: str, filename: str = "", register_if_unique: bool = False, institution_name: str = "") -> PHashMatchResult:
         """
-        Calculates Hamming distance against registered historical facility submissions.
+        Calculates Hamming distance against registered historical facility submissions
+        purely from bitwise arithmetic, without filename heuristics.
         """
-        # For demonstration test files explicitly marked as duplicate
-        if "duplicate" in filename.lower():
-            target_hash = "bf82d921a8f01c34"
-            matched_record = self.facility_hash_registry[target_hash]
-            return PHashMatchResult(
-                phash=target_hash,
-                is_duplicate=True,
-                duplicate_matched_id=matched_record["id"],
-                hamming_distance=0,
-                similarity_percentage=100.0,
-                reused_facility_name=f"{matched_record['facility_name']} at {matched_record['institution']}",
-            )
-
         best_match_id = None
         min_hamming = 64
         reused_name = None
@@ -95,6 +127,16 @@ class PerceptualHashMatcher:
 
         is_dup = min_hamming <= self.hamming_threshold
         similarity = max(0.0, round((1.0 - (min_hamming / 64.0)) * 100.0, 1))
+
+        if not is_dup and register_if_unique and phash != "0000000000000000":
+            # Add new photo hash to registry for subsequent deduplication
+            new_id = f"DOC-PHOTO-{len(self.facility_hash_registry) + 1:04d}"
+            self.facility_hash_registry[phash] = {
+                "id": new_id,
+                "institution": institution_name or "Registered Institution",
+                "facility_name": filename or "Campus Facility",
+            }
+            self._save_registry()
 
         return PHashMatchResult(
             phash=phash,

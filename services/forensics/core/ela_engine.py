@@ -1,9 +1,10 @@
 import io
 import base64
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict, Any
 import numpy as np
-from PIL import Image, ImageChops, ImageEnhance
+import cv2
+from PIL import Image, ImageChops, ImageEnhance, ImageDraw
 
 from ..config import settings
 from ..schemas.forensic_result import ELAResult
@@ -14,7 +15,8 @@ logger = logging.getLogger("forensics.ela_engine")
 class ErrorLevelAnalysisEngine:
     """
     Error Level Analysis (ELA) Core Engine for detecting digital splicing and modifications.
-    Computes compression differential heatmaps between original and recompressed image states.
+    Computes compression differential heatmaps between original and recompressed image states,
+    and identifies localized tampering clusters via OpenCV contour analysis.
     """
 
     def __init__(
@@ -56,7 +58,6 @@ class ErrorLevelAnalysisEngine:
         std_error = float(np.std(diff_arr))
 
         # 5. Amplify error rates for visual inspection
-        # Dynamic scale factor based on peak difference
         if max_error > 0:
             extrema_scale = 255.0 / max_error
             effective_scale = min(self.scale_factor, extrema_scale)
@@ -65,23 +66,46 @@ class ErrorLevelAnalysisEngine:
 
         amplified = ImageEnhance.Brightness(diff).enhance(effective_scale)
 
-        # 6. Detect high-contrast outlier pixels (potential forged numbers or text splices)
-        outlier_threshold = mean_error + (2.5 * std_error)
-        outlier_mask = np.any(diff_arr > max(outlier_threshold, 20.0), axis=2)
+        # 6. Detect localized high-contrast outlier clusters with OpenCV contours
+        outlier_threshold = max(mean_error + (2.5 * std_error), 20.0)
+        outlier_mask = np.any(diff_arr > outlier_threshold, axis=2).astype(np.uint8) * 255
+
+        # Morphological dilation to connect adjacent anomalous pixels into coherent clusters
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        dilated_mask = cv2.dilate(outlier_mask, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(dilated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
         total_pixels = original.width * original.height
-        outlier_count = int(np.sum(outlier_mask))
+        outlier_count = int(np.sum(outlier_mask > 0))
         high_contrast_ratio = float(outlier_count / max(total_pixels, 1))
 
-        # 7. Generate base64 heatmap with contrast amplification
+        # Find significant localized anomaly clusters (not uniform noise)
+        anomalous_clusters = []
+        for c in contours:
+            area = cv2.contourArea(c)
+            if 60 < area < (total_pixels * 0.15):
+                x, y, w, h = cv2.boundingRect(c)
+                anomalous_clusters.append({"x": x, "y": y, "w": w, "h": h, "area": area})
+
+        cluster_density_boost = min(len(anomalous_clusters) * 4.5, 30.0) if len(anomalous_clusters) > 0 else 0.0
+
+        # Annotate top outlier clusters onto amplified heatmap if significant
+        if len(anomalous_clusters) > 0 and (high_contrast_ratio > 0.015 or max_error > 80):
+            draw = ImageDraw.Draw(amplified)
+            for cl in anomalous_clusters[:8]:
+                draw.rectangle([cl["x"], cl["y"], cl["x"] + cl["w"], cl["y"] + cl["h"]], outline=(255, 50, 50), width=2)
+
+        # 7. Generate base64 heatmap
         heatmap_base64 = self._encode_heatmap(amplified)
 
         # 8. Compute normalized anomaly score (0 - 100)
-        # Spliced regions exhibit concentrated high error deviation
         raw_score = (
-            (mean_error * 3.5)
-            + (std_error * 4.0)
-            + (high_contrast_ratio * 350.0)
-            + (max_error * 0.25)
+            (mean_error * 3.2)
+            + (std_error * 3.8)
+            + (high_contrast_ratio * 320.0)
+            + (max_error * 0.22)
+            + cluster_density_boost
         )
         anomaly_score = float(np.clip(raw_score, 0.0, 100.0))
 

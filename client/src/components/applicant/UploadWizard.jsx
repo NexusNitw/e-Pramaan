@@ -15,6 +15,7 @@ const REQUIRED_DOCUMENTS = [
   { id: 'affiliation_letter', label: 'University Affiliation Letter', required: true, desc: 'Current academic session sanctioned intake notification' },
   { id: 'faculty_roster', label: 'Faculty Master Roster', required: true, desc: 'Teaching faculty sheet with designations and qualifications' },
   { id: 'land_deed', label: 'Land Title / Conveyance Deed', required: true, desc: 'Registered property deed with Khasra/Survey numbers' },
+  { id: 'infra_photo', label: 'Infrastructure Facility Photograph', required: false, desc: 'High-resolution photo of CAD Lab / Workshop with EXIF GPS Geotag' },
 ];
 
 export default function UploadWizard({ onSubmissionComplete, currentUser }) {

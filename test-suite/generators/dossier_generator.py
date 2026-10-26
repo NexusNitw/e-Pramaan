@@ -86,6 +86,13 @@ class SyntheticDossierGenerator:
             c = canvas.Canvas(str(filepath), pagesize=A4)
             width, height = A4
 
+            if "TAMPERED" in case["case_id"].upper():
+                c.setCreator("Adobe Photoshop CC 2023")
+                c.setProducer("Adobe Photoshop CC 2023")
+            else:
+                c.setCreator("AICTE Regulatory Document Server")
+                c.setProducer("Government Statutory Portal")
+
             if "FIRE" in doc_type:
                 self._draw_fire_noc_pdf(c, width, height, text, case)
             elif "AFFILIATION" in doc_type:
@@ -105,7 +112,7 @@ class SyntheticDossierGenerator:
 
     def _generate_image_file(self, filepath: Path, text: str, case: dict):
         """
-        Creates synthetic facility image with rendered text label.
+        Creates synthetic facility image with rendered text label and real EXIF GPS tags.
         """
         if PILLOW_AVAILABLE:
             img = Image.new("RGB", (800, 600), color=(30, 41, 59))
@@ -120,7 +127,41 @@ class SyntheticDossierGenerator:
                 draw.text((40, y), line, fill=(226, 232, 240))
                 y += 24
 
-            img.save(filepath, format="JPEG", quality=90)
+            # Embed EXIF GPS tags
+            is_dup = "duplicate" in case["case_id"].lower()
+            lat = 16.9820 if is_dup else case["institution"].get("geoCoordinates", {}).get("latitude", 18.5204)
+            lon = 78.1120 if is_dup else case["institution"].get("geoCoordinates", {}).get("longitude", 73.8567)
+
+            exif = img.getexif()
+            gps_ifd = exif.get_ifd(0x8825)
+            lat_d = int(abs(lat))
+            lat_m = int((abs(lat) - lat_d) * 60)
+            lat_s = round(((abs(lat) - lat_d) * 60 - lat_m) * 60, 2)
+            lon_d = int(abs(lon))
+            lon_m = int((abs(lon) - lon_d) * 60)
+            lon_s = round(((abs(lon) - lon_d) * 60 - lon_m) * 60, 2)
+
+            gps_ifd[1] = "N" if lat >= 0 else "S"
+            gps_ifd[2] = (lat_d, lat_m, lat_s)
+            gps_ifd[3] = "E" if lon >= 0 else "W"
+            gps_ifd[4] = (lon_d, lon_m, lon_s)
+
+            img.save(filepath, format="JPEG", quality=90, exif=exif)
+
+            # Register duplicate photo dHash into registry for dynamic matching
+            if is_dup:
+                try:
+                    from services.forensics.core.phash_matcher import PerceptualHashMatcher
+                    matcher = PerceptualHashMatcher()
+                    computed = matcher.compute_phash(filepath.read_bytes())
+                    matcher.facility_hash_registry[computed] = {
+                        "id": "DOC-PHOTO-HISTORICAL-001",
+                        "institution": "Sri Krishna College of Technology",
+                        "facility_name": "Advanced Physics Laboratory (Room 204)",
+                    }
+                    matcher._save_registry()
+                except Exception as p_err:
+                    logger.debug(f"Could not register test duplicate hash: {p_err}")
         else:
             # Minimal binary JPEG fallback
             filepath.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xdb\x00C\x00\xff\xd9")
@@ -154,19 +195,32 @@ class SyntheticDossierGenerator:
         c.setLineWidth(1)
         c.line(45, height - 105, width - 45, height - 105)
 
-    def _draw_footer_and_pki(self, c, width, height, ref_code: str):
+    def _draw_footer_and_pki(self, c, width, height, ref_code: str, qr_data: str = ""):
         c.setStrokeColorRGB(0.8, 0.85, 0.9)
         c.setLineWidth(1)
         c.line(45, 95, width - 45, 95)
 
-        # Security QR placeholder box
-        c.setStrokeColorRGB(0.2, 0.3, 0.5)
-        c.setLineWidth(1)
-        c.rect(width - 95, 42, 50, 50)
-        c.setFont("Helvetica-Bold", 6)
-        c.drawCentredString(width - 70, 68, "AICTE / PKI")
-        c.drawCentredString(width - 70, 58, "VERIFIED")
-        c.drawCentredString(width - 70, 48, "[QR CODE]")
+        # Generate real QR code image if qr_data is specified
+        qr_drawn = False
+        if qr_data:
+            try:
+                import qrcode
+                qr_img = qrcode.make(qr_data)
+                temp_qr = self.output_dir / f"temp_qr_{abs(hash(ref_code))}.png"
+                qr_img.save(str(temp_qr))
+                c.drawImage(str(temp_qr), width - 95, 42, 50, 50)
+                qr_drawn = True
+            except Exception as qr_err:
+                logger.debug(f"Could not render QR image: {qr_err}")
+
+        if not qr_drawn:
+            c.setStrokeColorRGB(0.2, 0.3, 0.5)
+            c.setLineWidth(1)
+            c.rect(width - 95, 42, 50, 50)
+            c.setFont("Helvetica-Bold", 6)
+            c.drawCentredString(width - 70, 68, "AICTE / PKI")
+            c.drawCentredString(width - 70, 58, "VERIFIED")
+            c.drawCentredString(width - 70, 48, "[QR CODE]")
 
         # Footer Signoff Text
         c.setFillColorRGB(0.2, 0.25, 0.35)
@@ -274,7 +328,10 @@ class SyntheticDossierGenerator:
         c.setStrokeColorRGB(0.2, 0.3, 0.5)
         c.rect(375, curr_y - 82, 130, 36)
 
-        self._draw_footer_and_pki(c, width, height, "NOC-2026-MH-0921")
+        ref_no = "MH-FIRE-2024-EXP" if "EXPIRED" in case["case_id"].upper() else "MH-FIRE-2026-0921"
+        valid_date = "2025-03-09" if "EXPIRED" in case["case_id"].upper() else "2027-01-14"
+        qr_url = f"https://verify.dte.gov.in/statutory/cert?id={ref_no}&intake=420&valid={valid_date}"
+        self._draw_footer_and_pki(c, width, height, ref_no, qr_url)
         c.showPage()
 
     def _draw_affiliation_letter_pdf(self, c, width, height, text: str, case: dict):
@@ -394,7 +451,10 @@ class SyntheticDossierGenerator:
         c.setStrokeColorRGB(0.2, 0.3, 0.5)
         c.rect(375, curr_y - 62, 130, 36)
 
-        self._draw_footer_and_pki(c, width, height, "SPPU-AFFIL-2026-882")
+        ref_no = "AKTU/AFF/2026/0912" if "TAMPERED" in case["case_id"].upper() else "SPPU-AFFIL-2026-882"
+        qr_intake = 180 if "TAMPERED" in case["case_id"].upper() else total_intake
+        qr_url = f"https://verify.dte.gov.in/statutory/cert?id={ref_no}&intake={qr_intake}&valid=2027-01-14"
+        self._draw_footer_and_pki(c, width, height, ref_no, qr_url)
         c.showPage()
 
     def _draw_faculty_roster_pdf(self, c, width, height, text: str, case: dict):
@@ -513,7 +573,7 @@ class SyntheticDossierGenerator:
         c.setFont("Helvetica", 7)
         c.drawString(380, curr_y - 35, "Sponsoring Trust / Society")
 
-        self._draw_footer_and_pki(c, width, height, "ROSTER-2026-AICTE-1082")
+        self._draw_footer_and_pki(c, width, height, "ROSTER-2026-AICTE-1082", "https://portal.aicte-india.org/faculty/verify?roster=AICTE-2026-1082")
         c.showPage()
 
     def _draw_land_deed_pdf(self, c, width, height, text: str, case: dict):
@@ -602,7 +662,7 @@ class SyntheticDossierGenerator:
         c.setStrokeColorRGB(0.2, 0.3, 0.5)
         c.rect(375, curr_y - 62, 130, 36)
 
-        self._draw_footer_and_pki(c, width, height, "DEED-2012-PUN-10482")
+        self._draw_footer_and_pki(c, width, height, "DEED-2012-PUN-10482", "https://igrmaharashtra.gov.in/deeds/verify?doc=BND-10482-2012")
         c.showPage()
 
     def _draw_generic_statutory_pdf(self, c, width, height, doc_type: str, text: str, case: dict):
@@ -636,7 +696,7 @@ class SyntheticDossierGenerator:
             y -= 15
 
         c.drawString(45, y - 20, "This statutory document is certified to be authentic and in full compliance with AICTE norms.")
-        self._draw_footer_and_pki(c, width, height, "DOC-STATUTORY-2026")
+        self._draw_footer_and_pki(c, width, height, "DOC-STATUTORY-2026", f"https://verify.aicte.gov.in/statutory/cert?id={app.get('applicationNumber', 'APP-1000')}")
         c.showPage()
 
     def _create_pure_pdf_bytes(self, doc_type: str, text: str, case: dict) -> bytes:

@@ -12,21 +12,26 @@ class DocumentDeskewer:
     """
     Automated document skew angle detection and geometric rectification.
     Uses horizontal projection profile variance across candidate angles.
+    Calculations are strictly driven by image pixels without filename heuristics.
     """
 
     def detect_skew_angle(self, image_bytes: bytes, filename: str = "") -> DeskewResult:
         """
         Calculates tilt angle of text baselines in degrees.
         """
-        # For demonstration files explicitly titled skewed
-        if "skew" in filename.lower():
-            return DeskewResult(
-                skew_angle_degrees=-3.5,
-                rotation_required=True,
-                orientation_status="SLIGHT_SKEW",
-            )
-
         try:
+            # Handle PDF bytes if passed
+            if image_bytes[:4] == b"%PDF":
+                try:
+                    import fitz
+                    doc = fitz.open(stream=image_bytes, filetype="pdf")
+                    if len(doc) > 0:
+                        pix = doc[0].get_pixmap(dpi=150)
+                        image_bytes = pix.tobytes("png")
+                    doc.close()
+                except Exception as pdf_err:
+                    logger.debug(f"Could not render PDF for deskew check: {pdf_err}")
+
             with Image.open(io.BytesIO(image_bytes)) as img:
                 # 1. Downscale to fast thumbnail for projection search
                 thumb = img.convert("L").resize((300, 400), Image.Resampling.NEAREST)

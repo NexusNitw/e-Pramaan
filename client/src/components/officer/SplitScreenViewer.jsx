@@ -309,46 +309,63 @@ export default function SplitScreenViewer({ application, onBack }) {
             {/* TAB 2: APH COMPLIANCE NORMS */}
             {activeTab === 'compliance' && (
               <div className="space-y-3">
-                <span className="text-xs font-semibold text-white block">
-                  Approval Process Handbook (APH) Standards Evaluation
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white block">
+                    Approval Process Handbook (APH) Standards Evaluation
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {application?.ruleExecutionResults?.length || 0} Norms Evaluated
+                  </span>
+                </div>
 
                 <div className="space-y-2">
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
-                    <div>
-                      <span className="font-semibold text-slate-200 block">Student-to-Faculty Ratio (SFR)</span>
-                      <span className="text-slate-400 text-[11px]">Norm: ≤ 1:15 (UG Engineering)</span>
+                  {application?.ruleExecutionResults && application.ruleExecutionResults.length > 0 ? (
+                    application.ruleExecutionResults.map((rule, rIdx) => {
+                      const isPassed = rule.passed;
+                      return (
+                        <div
+                          key={rule.ruleCode || rIdx}
+                          className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1.5"
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-slate-200">{rule.title || rule.ruleCode}</span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                                  {rule.ruleCode}
+                                </span>
+                              </div>
+                              <span className="text-slate-400 text-[11px] block mt-0.5">
+                                Requirement: {rule.requiredValue || 'APH Regulatory Norm'}
+                              </span>
+                            </div>
+                            <span
+                              className={`font-mono font-bold text-[11px] px-2 py-0.5 rounded border whitespace-nowrap shrink-0 ${
+                                isPassed
+                                  ? 'text-emerald-400 bg-emerald-950/60 border-emerald-900'
+                                  : 'text-red-400 bg-red-950/60 border-red-900'
+                              }`}
+                            >
+                              {isPassed ? 'Compliant' : `Deficiency (-${rule.penaltyScore || 0})`}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-300 font-mono bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                            <span className="text-slate-400 block text-[10px]">Observed Status / Measurement:</span>
+                            {rule.observedValue || 'Verified'}
+                          </div>
+                          {rule.message && (
+                            <p className="text-[11px] text-slate-400 leading-relaxed italic">
+                              {rule.message}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-center text-xs text-slate-400">
+                      No automated compliance evaluations available for this dossier.
                     </div>
-                    <span className="text-emerald-400 font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900">
-                      1:14.2 (Compliant)
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
-                    <div>
-                      <span className="font-semibold text-slate-200 block">Instructional Area Per Student</span>
-                      <span className="text-slate-400 text-[11px]">Norm: ≥ 5.5 sq.m per student</span>
-                    </div>
-                    <span className="text-emerald-400 font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900">
-                      8.9 sq.m (Compliant)
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
-                    <div>
-                      <span className="font-semibold text-slate-200 block">Intake vs University Sanction</span>
-                      <span className="text-slate-400 text-[11px]">Cross-verification with Affiliation</span>
-                    </div>
-                    {application.compositeRiskScore > 70 ? (
-                      <span className="text-red-400 font-mono font-bold bg-red-950/60 px-2 py-0.5 rounded border border-red-900">
-                        Discrepancy Detected
-                      </span>
-                    ) : (
-                      <span className="text-emerald-400 font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-900">
-                        Intake Matches (420 Seats)
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             )}
