@@ -4,9 +4,14 @@ import LoginPage from './components/auth/LoginPage';
 import UploadWizard from './components/applicant/UploadWizard';
 import ScrutinyConsole from './components/officer/ScrutinyConsole';
 import SplitScreenViewer from './components/officer/SplitScreenViewer';
+import GlobalLoadingOverlay from './components/common/GlobalLoadingOverlay';
+import { LoadingProvider, useLoading } from './context/LoadingContext';
 import { fetchApplications } from './config/api';
+import { mockApplications } from './mockData';
 
-export default function App() {
+function AppContent() {
+  const { startLoading, stopLoading, triggerClickFeedback } = useLoading();
+
   // Initialize authenticated user from localStorage if present
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -22,30 +27,36 @@ export default function App() {
     return currentUser.role === 'APPLICANT' ? 'applicant' : 'officer';
   });
 
-  const [applications, setApplications] = useState([]);
+  const [applications, setApplications] = useState(() => mockApplications || []);
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
 
-  const loadApplications = useCallback(async () => {
+  const loadApplications = useCallback(async (isInitial = false) => {
+    startLoading(isInitial ? 'Connecting to Regulatory Gateway...' : 'Refreshing Applications...');
     try {
       const response = await fetchApplications();
-      if (response && response.data) {
+      if (response && response.data && response.data.length > 0) {
         setApplications(response.data);
         setIsLiveConnected(true);
       }
     } catch (err) {
-      console.info('[AICTE App] Backend offline or using seeded fallback:', err.message);
+      console.info('[AICTE App] Backend offline or using fallback:', err.message);
       setIsLiveConnected(false);
+      setApplications((prev) => (prev && prev.length > 0 ? prev : mockApplications));
+    } finally {
+      stopLoading();
     }
-  }, []);
+  }, [startLoading, stopLoading]);
+
 
   useEffect(() => {
     if (currentUser) {
-      loadApplications();
+      loadApplications(true);
     }
   }, [currentUser, loadApplications]);
 
   const handleLoginSuccess = (user) => {
+    triggerClickFeedback('Session Initialized');
     setCurrentUser(user);
     const targetPortal = user.role === 'APPLICANT' ? 'applicant' : 'officer';
     setActivePortal(targetPortal);
@@ -53,6 +64,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    triggerClickFeedback('Signing out...');
     localStorage.removeItem('epramaan_token');
     localStorage.removeItem('epramaan_user');
     setCurrentUser(null);
@@ -60,16 +72,17 @@ export default function App() {
   };
 
   const handleSelectApplication = (app) => {
+    triggerClickFeedback('Opening Dossier...');
     setSelectedApplication(app);
   };
 
   const handleBackToConsole = () => {
+    triggerClickFeedback('Returning to Scrutiny Queue...');
     setSelectedApplication(null);
   };
 
   const handleSubmissionComplete = async (newTrackingId, createdApp) => {
     await loadApplications();
-    // For applicant, we can keep them in the upload wizard or show submission confirmation
     if (currentUser?.role === 'OFFICER' || currentUser?.role === 'ADMIN') {
       setActivePortal('officer');
       if (createdApp) {
@@ -90,13 +103,13 @@ export default function App() {
   const isApplicant = currentUser.role === 'APPLICANT';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       <Navbar
         currentUser={currentUser}
         activePortal={activePortal}
         setActivePortal={(portal) => {
-          // Prevent applicants from switching to officer console
           if (portal === 'officer' && !isOfficerOrAdmin) return;
+          triggerClickFeedback(`Switching to ${portal === 'officer' ? 'Officer Console' : 'Applicant Portal'}`);
           setActivePortal(portal);
           setSelectedApplication(null);
         }}
@@ -106,7 +119,7 @@ export default function App() {
       <main className="flex-1">
         {/* Applicant View */}
         {(activePortal === 'applicant' || isApplicant) && activePortal !== 'officer' && (
-          <UploadWizard onSubmissionComplete={handleSubmissionComplete} />
+          <UploadWizard onSubmissionComplete={handleSubmissionComplete} currentUser={currentUser} />
         )}
 
         {/* Officer Scrutiny Console & Inspector */}
@@ -127,5 +140,14 @@ export default function App() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <LoadingProvider>
+      <GlobalLoadingOverlay />
+      <AppContent />
+    </LoadingProvider>
   );
 }

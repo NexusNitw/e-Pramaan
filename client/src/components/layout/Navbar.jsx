@@ -6,8 +6,10 @@ import {
   LogOut,
   SlidersHorizontal,
 } from 'lucide-react';
+import { useLoading } from '../../context/LoadingContext';
 
 export default function Navbar({ currentUser, activePortal, setActivePortal, onLogout }) {
+  const { triggerClickFeedback } = useLoading();
   const isOfficer = currentUser?.role === 'OFFICER';
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -16,8 +18,8 @@ export default function Navbar({ currentUser, activePortal, setActivePortal, onL
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand & AICTE identity */}
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm">
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => triggerClickFeedback('AICTE Portal')}>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
@@ -39,22 +41,28 @@ export default function Navbar({ currentUser, activePortal, setActivePortal, onL
           <div className="flex items-center space-x-4">
             {/* Admin Portal Switcher (Only visible to Admin) */}
             {isAdmin && (
-              <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner">
                 <button
-                  onClick={() => setActivePortal('officer')}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                  onClick={() => {
+                    triggerClickFeedback('Switching to Officer Console');
+                    setActivePortal('officer');
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all active:scale-95 ${
                     activePortal === 'officer'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   Officer Console
                 </button>
                 <button
-                  onClick={() => setActivePortal('applicant')}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                  onClick={() => {
+                    triggerClickFeedback('Switching to Applicant Portal');
+                    setActivePortal('applicant');
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all active:scale-95 ${
                     activePortal === 'applicant'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -65,8 +73,8 @@ export default function Navbar({ currentUser, activePortal, setActivePortal, onL
 
             {/* User Profile Badge */}
             {currentUser && (
-              <div className="flex items-center space-x-3 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
-                <div className="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center text-blue-400">
+              <div className="flex items-center space-x-3 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 shadow-sm">
+                <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-blue-400">
                   {isOfficer ? (
                     <UserCheck className="w-4 h-4" />
                   ) : (
@@ -91,7 +99,7 @@ export default function Navbar({ currentUser, activePortal, setActivePortal, onL
                 <button
                   onClick={onLogout}
                   title="Sign out of e-Pramaan"
-                  className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors ml-1"
+                  className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors ml-1 active:scale-90"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>

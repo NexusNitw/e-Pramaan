@@ -8,14 +8,21 @@ export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5
  * Fetch all regulatory application dossiers from MongoDB Atlas.
  */
 export async function fetchApplications(filters = {}) {
-  const params = new URLSearchParams(filters).toString();
-  const url = `${API_BASE_URL}/api/applications${params ? `?${params}` : ''}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch applications: ${res.status} ${res.statusText}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const params = new URLSearchParams(filters).toString();
+    const url = `${API_BASE_URL}/api/applications${params ? `?${params}` : ''}`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch applications: ${res.status} ${res.statusText}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return await res.json();
 }
+
 
 /**
  * Fetch complete dossier with populated documents and audit trail.

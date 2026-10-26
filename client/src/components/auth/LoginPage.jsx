@@ -9,10 +9,15 @@ import {
   AlertCircle,
   FileText,
   CheckCircle2,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { loginUser, registerUser } from '../../config/api';
+import { useLoading } from '../../context/LoadingContext';
 
 export default function LoginPage({ onLoginSuccess }) {
+  const { triggerClickFeedback } = useLoading();
+
   const [isRegister, setIsRegister] = useState(false);
   const [role, setRole] = useState('OFFICER'); // 'OFFICER' or 'APPLICANT'
   const [email, setEmail] = useState('');
@@ -22,12 +27,16 @@ export default function LoginPage({ onLoginSuccess }) {
   const [aictePermanentId, setAictePermanentId] = useState('');
 
   const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(null); // 'OFFICER' | 'APPLICANT' | 'FORM'
   const [error, setError] = useState(null);
 
   // Quick Demo Login Handler
   const handleQuickLogin = async (demoRole) => {
     setError(null);
     setLoading(true);
+    setLoadingAction(demoRole);
+    triggerClickFeedback(`Authenticating as ${demoRole === 'OFFICER' ? 'Scrutiny Officer' : 'College Applicant'}...`);
+
     const demoEmail = demoRole === 'OFFICER' ? 'officer@aicte.gov.in' : 'applicant@college.edu.in';
     const demoPassword = 'Password@123';
 
@@ -72,6 +81,7 @@ export default function LoginPage({ onLoginSuccess }) {
       }
     } finally {
       setLoading(false);
+      setLoadingAction(null);
     }
   };
 
@@ -79,6 +89,8 @@ export default function LoginPage({ onLoginSuccess }) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    setLoadingAction('FORM');
+    triggerClickFeedback(isRegister ? 'Creating Regulatory Account...' : 'Authenticating Credentials...');
 
     try {
       if (isRegister) {
@@ -109,6 +121,7 @@ export default function LoginPage({ onLoginSuccess }) {
       setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
       setLoading(false);
+      setLoadingAction(null);
     }
   };
 
@@ -116,11 +129,13 @@ export default function LoginPage({ onLoginSuccess }) {
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-100">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         {/* Emblem / Portal Header */}
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 shadow-md mb-4 text-blue-400">
-          <ShieldCheck className="w-8 h-8" />
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 p-0.5 shadow-lg shadow-blue-500/20 mb-4">
+          <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-blue-400">
+            <ShieldCheck className="w-8 h-8" />
+          </div>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">
-          e-Pramaan Portal
+        <h1 className="text-2xl font-bold tracking-tight text-white flex items-center justify-center space-x-1.5">
+          <span>e-Pramaan Portal</span>
         </h1>
         <p className="mt-1 text-xs text-slate-400 font-medium">
           All India Council for Technical Education (AICTE)
@@ -131,7 +146,12 @@ export default function LoginPage({ onLoginSuccess }) {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg px-4 sm:px-0">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-6 sm:p-8">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-6 sm:p-8 relative overflow-hidden">
+          {/* Subtle top indicator if authenticating */}
+          {loading && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 animate-top-loading" />
+          )}
+
           {/* Quick Demo Access Bar */}
           <div className="mb-6">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-2.5">
@@ -142,17 +162,21 @@ export default function LoginPage({ onLoginSuccess }) {
                 type="button"
                 onClick={() => handleQuickLogin('OFFICER')}
                 disabled={loading}
-                className="flex flex-col items-start p-3.5 rounded-xl border border-blue-900/60 bg-blue-950/30 hover:bg-blue-950/60 hover:border-blue-700 transition-all text-left group"
+                className="flex flex-col items-start p-3.5 rounded-xl border border-blue-900/60 bg-blue-950/30 hover:bg-blue-950/60 hover:border-blue-700 active:scale-95 transition-all text-left group disabled:opacity-60"
               >
                 <div className="flex items-center space-x-2 text-blue-400 text-xs font-semibold mb-1">
-                  <UserCheck className="w-4 h-4" />
+                  {loadingAction === 'OFFICER' ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                  ) : (
+                    <UserCheck className="w-4 h-4" />
+                  )}
                   <span>Scrutiny Officer</span>
                 </div>
                 <p className="text-[11px] text-slate-400 line-clamp-1">
                   Review queue, verify APH norms & audit
                 </p>
                 <span className="text-[10px] text-blue-300 font-mono mt-1 group-hover:translate-x-0.5 transition-transform inline-flex items-center">
-                  Sign in as Officer →
+                  {loadingAction === 'OFFICER' ? 'Connecting session...' : 'Sign in as Officer →'}
                 </span>
               </button>
 
@@ -160,17 +184,21 @@ export default function LoginPage({ onLoginSuccess }) {
                 type="button"
                 onClick={() => handleQuickLogin('APPLICANT')}
                 disabled={loading}
-                className="flex flex-col items-start p-3.5 rounded-xl border border-indigo-900/60 bg-indigo-950/30 hover:bg-indigo-950/60 hover:border-indigo-700 transition-all text-left group"
+                className="flex flex-col items-start p-3.5 rounded-xl border border-indigo-900/60 bg-indigo-950/30 hover:bg-indigo-950/60 hover:border-indigo-700 active:scale-95 transition-all text-left group disabled:opacity-60"
               >
                 <div className="flex items-center space-x-2 text-indigo-400 text-xs font-semibold mb-1">
-                  <Building2 className="w-4 h-4" />
+                  {loadingAction === 'APPLICANT' ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                  ) : (
+                    <Building2 className="w-4 h-4" />
+                  )}
                   <span>College Applicant</span>
                 </div>
                 <p className="text-[11px] text-slate-400 line-clamp-1">
                   Upload dossiers & track approval status
                 </p>
                 <span className="text-[10px] text-indigo-300 font-mono mt-1 group-hover:translate-x-0.5 transition-transform inline-flex items-center">
-                  Sign in as College →
+                  {loadingAction === 'APPLICANT' ? 'Connecting session...' : 'Sign in as College →'}
                 </span>
               </button>
             </div>
@@ -188,7 +216,7 @@ export default function LoginPage({ onLoginSuccess }) {
           </div>
 
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-red-950/50 border border-red-900 text-red-300 text-xs flex items-center space-x-2">
+            <div className="mb-5 p-3 rounded-xl bg-red-950/50 border border-red-900 text-red-300 text-xs flex items-center space-x-2 animate-fade-in">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -208,7 +236,7 @@ export default function LoginPage({ onLoginSuccess }) {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Dr. Rameshwar Sharma"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-colors"
                   />
                 </div>
 
@@ -219,22 +247,28 @@ export default function LoginPage({ onLoginSuccess }) {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setRole('OFFICER')}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all ${
+                      onClick={() => {
+                        triggerClickFeedback();
+                        setRole('OFFICER');
+                      }}
+                      className={`p-2 rounded-lg text-xs font-medium border transition-all ${
                         role === 'OFFICER'
-                          ? 'bg-blue-600 text-white border-blue-500'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-400'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      AICTE Scrutiny Officer
+                      Scrutiny Officer
                     </button>
                     <button
                       type="button"
-                      onClick={() => setRole('APPLICANT')}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all ${
+                      onClick={() => {
+                        triggerClickFeedback();
+                        setRole('APPLICANT');
+                      }}
+                      className={`p-2 rounded-lg text-xs font-medium border transition-all ${
                         role === 'APPLICANT'
-                          ? 'bg-blue-600 text-white border-blue-500'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                          ? 'bg-indigo-600/20 border-indigo-500 text-indigo-400'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
                       Institution Applicant
@@ -243,17 +277,18 @@ export default function LoginPage({ onLoginSuccess }) {
                 </div>
 
                 {role === 'APPLICANT' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <>
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
                         Institution Name
                       </label>
                       <input
                         type="text"
+                        required
                         value={institutionName}
                         onChange={(e) => setInstitutionName(e.target.value)}
-                        placeholder="Apex College of Engg"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. Apex Institute of Technology"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-colors"
                       />
                     </div>
                     <div>
@@ -262,13 +297,14 @@ export default function LoginPage({ onLoginSuccess }) {
                       </label>
                       <input
                         type="text"
+                        required
                         value={aictePermanentId}
                         onChange={(e) => setAictePermanentId(e.target.value)}
                         placeholder="1-3349182390"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 font-mono transition-colors"
                       />
                     </div>
-                  </div>
+                  </>
                 )}
               </>
             )}
@@ -283,8 +319,8 @@ export default function LoginPage({ onLoginSuccess }) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={isRegister ? "name@institution.edu.in" : "officer@aicte.gov.in"}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                  placeholder="officer@aicte.gov.in"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono"
                 />
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
               </div>
@@ -292,7 +328,7 @@ export default function LoginPage({ onLoginSuccess }) {
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                Password
+                Security Password
               </label>
               <div className="relative">
                 <input
@@ -301,7 +337,7 @@ export default function LoginPage({ onLoginSuccess }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-colors"
                 />
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
               </div>
@@ -310,10 +346,13 @@ export default function LoginPage({ onLoginSuccess }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors shadow-sm flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full mt-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50"
             >
-              {loading ? (
-                <span>Processing...</span>
+              {loadingAction === 'FORM' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Authenticating Credentials...</span>
+                </>
               ) : (
                 <>
                   <span>{isRegister ? 'Register Account' : 'Sign In to Portal'}</span>
@@ -330,8 +369,11 @@ export default function LoginPage({ onLoginSuccess }) {
                 Already have an authorized account?{' '}
                 <button
                   type="button"
-                  onClick={() => setIsRegister(false)}
-                  className="text-blue-400 hover:underline font-medium"
+                  onClick={() => {
+                    triggerClickFeedback();
+                    setIsRegister(false);
+                  }}
+                  className="text-blue-400 hover:underline font-medium ml-1"
                 >
                   Sign In
                 </button>
@@ -341,8 +383,11 @@ export default function LoginPage({ onLoginSuccess }) {
                 Registering a new institution or officer?{' '}
                 <button
                   type="button"
-                  onClick={() => setIsRegister(true)}
-                  className="text-blue-400 hover:underline font-medium"
+                  onClick={() => {
+                    triggerClickFeedback();
+                    setIsRegister(true);
+                  }}
+                  className="text-blue-400 hover:underline font-medium ml-1"
                 >
                   Create Account
                 </button>

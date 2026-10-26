@@ -7,8 +7,11 @@ import {
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { uploadDocumentFile, createApplicationDossier, runScrutinyPipeline } from '../../config/api';
+import { useLoading } from '../../context/LoadingContext';
 
 const REQUIRED_DOCUMENTS = [
   { id: 'fire_noc', label: 'Fire Safety NOC Certificate', required: true, desc: 'Issued by State Fire & Rescue Services (NBC Part IV)' },
@@ -19,6 +22,8 @@ const REQUIRED_DOCUMENTS = [
 ];
 
 export default function UploadWizard({ onSubmissionComplete, currentUser }) {
+  const { startPipeline, setPipelineStep, finishPipeline, triggerClickFeedback } = useLoading();
+
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     aictePermanentId: currentUser?.aictePermanentId || '1-3349182390',
@@ -30,6 +35,7 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
   });
 
   const [uploadedFiles, setUploadedFiles] = useState({});
+  const [uploadingCategoryId, setUploadingCategoryId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trackingId, setTrackingId] = useState(null);
 
@@ -41,22 +47,35 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
   const handleFileUpload = (categoryId, e) => {
     const file = e.target.files[0];
     if (file) {
-      setUploadedFiles((prev) => ({
-        ...prev,
-        [categoryId]: {
-          file,
-          name: file.name,
-          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-          type: file.type || 'application/pdf',
-        },
-      }));
+      setUploadingCategoryId(categoryId);
+      triggerClickFeedback(`Ingesting ${file.name}...`);
+
+      setTimeout(() => {
+        setUploadedFiles((prev) => ({
+          ...prev,
+          [categoryId]: {
+            file,
+            name: file.name,
+            size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+            type: file.type || 'application/pdf',
+          },
+        }));
+        setUploadingCategoryId(null);
+        triggerClickFeedback(`Certificate Attached`);
+      }, 500);
     }
   };
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
+    triggerClickFeedback('Initiating Multi-Service AI Scrutiny Pipeline');
+
     const generatedId = `AICTE-2026-${formData.category.slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`;
     setTrackingId(generatedId);
+
+    // Launch dedicated AI scrutiny pipeline overlay modal
+    startPipeline();
+    setPipelineStep(0, 15);
 
     try {
       // 1. Create Application
@@ -73,10 +92,11 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
         });
         createdApp = appRes.data;
       } catch (appErr) {
-        console.warn('[UploadWizard] Offline fallback:', appErr.message);
+        console.warn('[UploadWizard] Offline fallback mode:', appErr.message);
       }
 
-      // 2. Upload documents
+      // Step 2: Upload documents & run computer vision forensics
+      setPipelineStep(1, 35);
       const appId = createdApp?._id;
       const instId = createdApp?.institution?._id || createdApp?.institution;
 
@@ -91,21 +111,36 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
 
       await Promise.all(uploadPromises);
 
-      // 3. Trigger Scrutiny Pipeline
+      // Step 3: Trigger Scrutiny Pipeline (OCR extraction)
+      setPipelineStep(2, 60);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
       if (appId) {
         try {
           await runScrutinyPipeline(appId);
         } catch (e) {
-          // background
+          console.warn('[UploadWizard] Scrutiny pipeline background processing:', e.message);
         }
       }
 
+      // Step 4: PKI & Trust Rails
+      setPipelineStep(3, 85);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Step 5: APH Rules Engine Evaluation
+      setPipelineStep(4, 98);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      // Complete pipeline
+      finishPipeline();
       setIsSubmitting(false);
       setCurrentStep(3); // Completed step
+
       if (onSubmissionComplete) {
         onSubmissionComplete(generatedId, createdApp);
       }
     } catch (err) {
+      finishPipeline();
       setIsSubmitting(false);
       setCurrentStep(3);
     }
@@ -116,10 +151,13 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
       {/* Wizard Step Indicator */}
       <div className="mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
-          <h2 className="text-lg font-bold text-white">
-            {currentStep === 1 && 'Step 1: Institutional & Application Scope'}
-            {currentStep === 2 && 'Step 2: Statutory Document Uploads'}
-            {currentStep === 3 && 'Application Submitted'}
+          <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+            <span>
+              {currentStep === 1 && 'Step 1: Institutional & Application Scope'}
+              {currentStep === 2 && 'Step 2: Statutory Document Uploads'}
+              {currentStep === 3 && 'Application Submitted'}
+            </span>
+            {isSubmitting && <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />}
           </h2>
           <p className="text-xs text-slate-400">
             {currentStep === 1 && 'Fill required institutional parameters for AICTE regulatory verification'}
@@ -143,7 +181,7 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
                 name="aictePermanentId"
                 value={formData.aictePermanentId}
                 onChange={handleInputChange}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono transition-colors"
                 placeholder="1-3349182390"
               />
             </div>
@@ -155,7 +193,7 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
                 name="institutionName"
                 value={formData.institutionName}
                 onChange={handleInputChange}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
 
@@ -165,7 +203,7 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
                 name="category"
                 value={formData.category}
                 onChange={handleInputChange}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 transition-colors"
               >
                 <option value="EXTENSION_OF_APPROVAL">Extension of Approval (EoA)</option>
                 <option value="NEW_INSTITUTION">New Institution Setup</option>
@@ -192,7 +230,7 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
                 name="requestedIntake"
                 value={formData.requestedIntake}
                 onChange={handleInputChange}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono transition-colors"
               />
             </div>
 
@@ -203,15 +241,18 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
                 name="totalStudentEnrolled"
                 value={formData.totalStudentEnrolled}
                 onChange={handleInputChange}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-mono transition-colors"
               />
             </div>
           </div>
 
           <div className="flex justify-end pt-3 border-t border-slate-800">
             <button
-              onClick={() => setCurrentStep(2)}
-              className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors shadow-sm"
+              onClick={() => {
+                triggerClickFeedback('Proceeding to Step 2');
+                setCurrentStep(2);
+              }}
+              className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white px-4 py-2 rounded-lg text-xs font-semibold transition-all shadow-md shadow-blue-600/20"
             >
               <span>Continue to Uploads</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -226,41 +267,69 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
           <div className="space-y-3">
             {REQUIRED_DOCUMENTS.map((doc) => {
               const uploaded = uploadedFiles[doc.id];
+              const isCardUploading = uploadingCategoryId === doc.id;
+
               return (
                 <div
                   key={doc.id}
-                  className="bg-slate-950 border border-slate-800 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-700 transition-colors"
+                  className={`border rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all duration-200 ${
+                    isCardUploading
+                      ? 'bg-blue-950/30 border-blue-600/70 shadow-sm shadow-blue-500/10'
+                      : uploaded
+                      ? 'bg-slate-950 border-emerald-900/50'
+                      : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                  }`}
                 >
                   <div className="flex items-start space-x-3">
-                    <div className="p-2 rounded bg-slate-900 text-blue-400 mt-0.5 border border-slate-800">
-                      <FileText className="w-4 h-4" />
+                    <div className="p-2 rounded-lg bg-slate-900 text-blue-400 mt-0.5 border border-slate-800 flex-shrink-0">
+                      {isCardUploading ? (
+                        <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                      ) : (
+                        <FileText className="w-4 h-4" />
+                      )}
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
                         <span className="text-xs font-semibold text-white">{doc.label}</span>
-                        <span className="text-[10px] text-red-400 bg-red-950/60 px-1.5 py-0.2 rounded border border-red-900/60">
-                          Mandatory
-                        </span>
+                        {doc.required && (
+                          <span className="text-[10px] text-red-400 bg-red-950/60 px-1.5 py-0.2 rounded border border-red-900/60 font-mono">
+                            Mandatory
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">{doc.desc}</p>
-                      {uploaded && (
+
+                      {isCardUploading && (
+                        <div className="flex items-center space-x-1.5 mt-1 text-xs text-blue-400 font-mono animate-pulse">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Reading metadata & preparing certificate...</span>
+                        </div>
+                      )}
+
+                      {!isCardUploading && uploaded && (
                         <div className="flex items-center space-x-1.5 mt-1 text-xs text-emerald-400 font-mono">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>{uploaded.name} ({uploaded.size})</span>
+                          <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate max-w-xs">{uploaded.name}</span>
+                          <span className="text-slate-400">({uploaded.size})</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   <div>
-                    <label className="cursor-pointer inline-flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                      <UploadCloud className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{uploaded ? 'Replace' : 'Upload File'}</span>
+                    <label className="cursor-pointer inline-flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm">
+                      {isCardUploading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                      ) : (
+                        <UploadCloud className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                      <span>{isCardUploading ? 'Ingesting...' : uploaded ? 'Replace' : 'Upload File'}</span>
                       <input
                         type="file"
                         className="hidden"
                         accept=".pdf,.png,.jpg,.jpeg"
                         onChange={(e) => handleFileUpload(doc.id, e)}
+                        disabled={isSubmitting || isCardUploading}
                       />
                     </label>
                   </div>
@@ -271,8 +340,12 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
 
           <div className="flex justify-between items-center pt-3 border-t border-slate-800">
             <button
-              onClick={() => setCurrentStep(1)}
-              className="flex items-center space-x-1.5 text-slate-400 hover:text-white px-3 py-1.5 rounded text-xs transition-colors"
+              onClick={() => {
+                triggerClickFeedback('Back to Step 1');
+                setCurrentStep(1);
+              }}
+              disabled={isSubmitting}
+              className="flex items-center space-x-1.5 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Previous</span>
@@ -281,10 +354,13 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
             <button
               onClick={handleFinalSubmit}
               disabled={isSubmitting}
-              className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
+              className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white px-6 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
             >
               {isSubmitting ? (
-                <span>Submitting for Scrutiny...</span>
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Executing Scrutiny Pipeline...</span>
+                </>
               ) : (
                 <>
                   <span>Submit Application</span>
@@ -298,30 +374,34 @@ export default function UploadWizard({ onSubmissionComplete, currentUser }) {
 
       {/* STEP 3: Submission Confirmation */}
       {currentStep === 3 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center space-y-4 shadow-sm">
-          <div className="w-12 h-12 bg-emerald-950/80 border border-emerald-800 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-6 h-6" />
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center space-y-4 shadow-sm animate-fade-in">
+          <div className="w-14 h-14 bg-emerald-950/80 border border-emerald-700 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-emerald-900/30">
+            <CheckCircle2 className="w-7 h-7" />
           </div>
 
           <div>
-            <h3 className="text-lg font-bold text-white">Application Submitted for Scrutiny</h3>
+            <h3 className="text-lg font-bold text-white flex items-center justify-center space-x-1.5">
+              <span>Application Submitted for Scrutiny</span>
+              <Sparkles className="w-4 h-4 text-amber-400" />
+            </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
               Your application has been registered with the AICTE Regulatory Council. Scrutiny officers will examine statutory documents, OCR extracts, and APH compliance ratios.
             </p>
           </div>
 
-          <div className="bg-slate-950 p-3.5 rounded-lg border border-slate-800 max-w-sm mx-auto font-mono text-xs">
-            <span className="text-slate-400 block text-[11px] mb-0.5">Tracking Reference Number</span>
-            <span className="text-blue-400 font-bold text-sm tracking-wide">{trackingId}</span>
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 max-w-sm mx-auto font-mono text-xs shadow-inner">
+            <span className="text-slate-400 block text-[11px] mb-1">Tracking Reference Number</span>
+            <span className="text-blue-400 font-bold text-base tracking-wider">{trackingId}</span>
           </div>
 
           <div className="pt-2">
             <button
               onClick={() => {
+                triggerClickFeedback('New Application Draft');
                 setUploadedFiles({});
                 setCurrentStep(1);
               }}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+              className="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 px-5 py-2.5 rounded-lg text-xs font-medium border border-slate-700 transition-all shadow-sm"
             >
               Submit Another Application
             </button>

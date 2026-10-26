@@ -42,3 +42,87 @@
   backdrop-filter: blur(8px);
   border: 1px solid rgba(71, 85, 105, 0.3);
 }
+
+/* Tactile micro-interactions for buttons and interactive items */
+button, a, [role="button"], label.cursor-pointer {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+button:active:not(:disabled), a:active:not(:disabled), [role="button"]:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
+/* Global Glowing Click Ripple Animation */
+.click-ripple {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+  animation: ripple-spread 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 999999;
+}
+
+@keyframes ripple-spread {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(0);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.8), 0 0 30px rgba(99, 102, 241, 0.5);
+    background: radial-gradient(circle, rgba(147, 197, 253, 0.6) 0%, rgba(59, 130, 246, 0.25) 50%, transparent 80%);
+  }
+  100% {
+    width: 140px;
+    height: 140px;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0);
+  }
+}
+
+/* Top Progress Bar Infinite Shimmer */
+@keyframes top-loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(10%);
+  }
+  100% {
+    transform: translateX(105%);
+  }
+}
+
+.animate-top-loading {
+  animation: top-loading-slide 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Fade In Helper */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Accessibility: Respect Reduced Motion Preferences */
+@media (prefers-reduced-motion: reduce) {
+  .click-ripple {
+    animation-duration: 2s;
+  }
+  .animate-top-loading {
+    animation-duration: 4s;
+  }
+  button:active, a:active, [role="button"]:active {
+    transform: none;
+  }
+}
+

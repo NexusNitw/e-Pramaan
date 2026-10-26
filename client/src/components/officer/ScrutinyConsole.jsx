@@ -8,11 +8,15 @@ import {
   Search,
   ChevronRight,
   Building2,
+  Loader2,
 } from 'lucide-react';
+import { useLoading } from '../../context/LoadingContext';
 
 export default function ScrutinyConsole({ applications, onSelectApplication }) {
+  const { triggerClickFeedback } = useLoading();
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [openingAppId, setOpeningAppId] = useState(null);
 
   // Calculate metrics
   const totalCount = applications.length;
@@ -33,15 +37,23 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
     return matchesStatus && matchesSearch;
   });
 
+  const handleSelect = (app) => {
+    setOpeningAppId(app._id);
+    triggerClickFeedback(`Opening Dossier: ${app.institution?.name || app.applicationNumber}`);
+    setTimeout(() => {
+      onSelectApplication(app);
+    }, 200);
+  };
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-6 font-sans">
       {/* Top Banner & KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Ingested */}
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 transition-all hover:border-slate-700">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-400">Total Applications</span>
-            <div className="p-1.5 rounded bg-slate-800 text-slate-300">
+            <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
               <Building2 className="w-4 h-4" />
             </div>
           </div>
@@ -50,34 +62,34 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
         </div>
 
         {/* Green Compliant */}
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 transition-all hover:border-emerald-800/60">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-emerald-400">Compliant (Green)</span>
-            <div className="p-1.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-900">
+            <div className="p-1.5 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-900">
               <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-bold text-emerald-400 mt-2 font-mono">{greenCount}</p>
-          <span className="text-[11px] text-slate-400 mt-1 block">Full APH Norms Met</span>
+          <span className="text-[11px] text-slate-400 mt-1 block">APH Norms Verified</span>
         </div>
 
-        {/* Yellow Deficiencies */}
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+        {/* Yellow Deficiency */}
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 transition-all hover:border-amber-800/60">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-amber-400">Deficiencies (Yellow)</span>
-            <div className="p-1.5 rounded bg-amber-950/80 text-amber-400 border border-amber-900">
+            <div className="p-1.5 rounded-lg bg-amber-950/80 text-amber-400 border border-amber-900">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-bold text-amber-400 mt-2 font-mono">{yellowCount}</p>
-          <span className="text-[11px] text-slate-400 mt-1 block">NOC Renewal / Ratio Gap</span>
+          <span className="text-[11px] text-slate-400 mt-1 block">SFR / Land / Cadre Gaps</span>
         </div>
 
-        {/* Red Forgery */}
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+        {/* Red Flagged */}
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 transition-all hover:border-red-800/60">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-red-400">Flagged / High Risk (Red)</span>
-            <div className="p-1.5 rounded bg-red-950/80 text-red-400 border border-red-900">
+            <span className="text-xs font-medium text-red-400">High Risk / Flagged</span>
+            <div className="p-1.5 rounded-lg bg-red-950/80 text-red-400 border border-red-900">
               <ShieldAlert className="w-4 h-4" />
             </div>
           </div>
@@ -87,7 +99,7 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm">
         {/* Triage Status Pills */}
         <div className="flex items-center space-x-2 overflow-x-auto w-full md:w-auto">
           <span className="text-xs text-slate-400 flex items-center space-x-1 mr-1">
@@ -102,8 +114,11 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setFilterStatus(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+              onClick={() => {
+                triggerClickFeedback(`Filter: ${tab.label}`);
+                setFilterStatus(tab.id);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap active:scale-95 ${
                 filterStatus === tab.id
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
@@ -122,7 +137,7 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by college name, ref, or AICTE ID..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
       </div>
@@ -162,16 +177,18 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
                   const isGreen = app.triageStatus === 'GREEN_COMPLIANT';
                   const isYellow = app.triageStatus === 'YELLOW_DEFICIENCY';
                   const isRed = app.triageStatus === 'RED_HIGH_RISK_FORGERY';
+                  const isOpening = openingAppId === app._id;
 
                   return (
                     <tr
                       key={app._id}
                       className="hover:bg-slate-800/50 transition-colors group cursor-pointer"
-                      onClick={() => onSelectApplication(app)}
+                      onClick={() => handleSelect(app)}
                     >
                       <td className="px-5 py-3.5">
-                        <div className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                          {app.institution?.name || 'Institution Dossier'}
+                        <div className="font-semibold text-white group-hover:text-blue-400 transition-colors flex items-center space-x-2">
+                          <span>{app.institution?.name || 'Institution Dossier'}</span>
+                          {isOpening && <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />}
                         </div>
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center space-x-2">
                           <span>{app.applicationNumber || 'N/A'}</span>
@@ -216,7 +233,7 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
                         <div className="flex items-center space-x-2.5">
                           <div className="w-20 bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
                             <div
-                              className={`h-full rounded-full ${
+                              className={`h-full rounded-full transition-all duration-500 ${
                                 isRed ? 'bg-red-500' : isYellow ? 'bg-amber-400' : 'bg-emerald-400'
                               }`}
                               style={{ width: `${Math.min(100, Math.max(0, app.compositeRiskScore || 0))}%` }}
@@ -232,12 +249,22 @@ export default function ScrutinyConsole({ applications, onSelectApplication }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectApplication(app);
+                            handleSelect(app);
                           }}
-                          className="inline-flex items-center space-x-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm"
+                          disabled={isOpening}
+                          className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm disabled:opacity-75"
                         >
-                          <span>Review</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
+                          {isOpening ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                              <span>Opening...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Inspect</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </>
+                          )}
                         </button>
                       </td>
                     </tr>

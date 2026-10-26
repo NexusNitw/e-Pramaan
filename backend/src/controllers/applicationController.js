@@ -104,10 +104,15 @@ export const getApplications = async (req, res, next) => {
 
     const applications = await Application.find(filter)
       .populate('institution', 'name aictePermanentId category address')
-      .populate('documents')
+      .populate({
+        path: 'documents',
+        select: 'documentType fileName status storageUrl fileSizeBytes mimeType pageCount preScrutiny',
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit, 10));
+      .limit(parseInt(limit, 10))
+      .lean();
+
 
     return res.status(200).json({
       success: true,

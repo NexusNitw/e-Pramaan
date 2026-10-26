@@ -61,7 +61,9 @@ Thumbs.db
 client/dist/
 dist/
 *.md
+!README.md
 test-suite/generated_dossiers/
+
 *.xml
 instructions.txt
 # Testing purpose documents & benchmark scripts

@@ -13,12 +13,16 @@ import {
   ExternalLink,
   Award,
   Layers,
+  Loader2,
 } from 'lucide-react';
 import { submitOfficerRemark, downloadScrutinyReportPdf } from '../../config/api';
+import { useLoading } from '../../context/LoadingContext';
 
 export default function SplitScreenViewer({ application, onBack }) {
+  const { triggerClickFeedback } = useLoading();
   const [activeTab, setActiveTab] = useState('verification'); // 'verification', 'compliance', 'action'
   const [selectedDocIndex, setSelectedDocIndex] = useState(0);
+  const [isDocSwitching, setIsDocSwitching] = useState(false);
 
   // Officer remark state
   const [officerRemark, setOfficerRemark] = useState('');
@@ -108,8 +112,13 @@ export default function SplitScreenViewer({ application, onBack }) {
             return (
               <button
                 key={doc._id || idx}
-                onClick={() => setSelectedDocIndex(idx)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+                onClick={() => {
+                  triggerClickFeedback(`Switching to ${typeLabel}`);
+                  setIsDocSwitching(true);
+                  setSelectedDocIndex(idx);
+                  setTimeout(() => setIsDocSwitching(false), 200);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap active:scale-95 flex items-center space-x-1.5 ${
                   selectedDocIndex === idx
                     ? isOther
                       ? 'bg-amber-600 text-white shadow-sm'
@@ -138,6 +147,7 @@ export default function SplitScreenViewer({ application, onBack }) {
               <span className="text-[11px] text-slate-400 font-mono">
                 ({currentDoc?.fileName || 'certificate.pdf'})
               </span>
+              {isDocSwitching && <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />}
             </div>
 
             {currentDoc?.storageUrl && (
@@ -145,7 +155,8 @@ export default function SplitScreenViewer({ application, onBack }) {
                 href={currentDoc.storageUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-medium border border-slate-700 transition-all"
+                onClick={() => triggerClickFeedback('Opening Document Tab')}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-medium border border-slate-700 transition-all active:scale-95"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Open in Tab</span>
@@ -155,7 +166,12 @@ export default function SplitScreenViewer({ application, onBack }) {
 
           {/* Document Content View */}
           <div className="flex-1 bg-slate-950 rounded-xl border border-slate-800 overflow-hidden relative flex flex-col shadow-inner">
-            {currentDoc?.storageUrl ? (
+            {isDocSwitching ? (
+              <div className="flex-1 flex flex-col items-center justify-center space-y-3 bg-slate-950 text-slate-400">
+                <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                <span className="text-xs font-mono">Loading statutory document canvas...</span>
+              </div>
+            ) : currentDoc?.storageUrl ? (
               <iframe
                 src={`${currentDoc.storageUrl}#toolbar=1&navpanes=0`}
                 title={currentDoc.fileName || 'Statutory Document'}
@@ -173,6 +189,7 @@ export default function SplitScreenViewer({ application, onBack }) {
             )}
           </div>
         </div>
+
 
         {/* RIGHT PANE: Focused Regulatory Inspection Panel (5 Cols) */}
         <div className="lg:col-span-5 flex flex-col bg-slate-900 overflow-hidden">
@@ -416,21 +433,40 @@ export default function SplitScreenViewer({ application, onBack }) {
                   <button
                     onClick={handleApplyRemark}
                     disabled={isSubmittingRemark}
-                    className="flex-1 flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-4 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 shadow-sm"
+                    className="flex-1 flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-blue-500/20"
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{isSubmittingRemark ? 'Committing...' : 'Commit Determination'}</span>
+                    {isSubmittingRemark ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                        <span>Committing to Chain...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Commit Determination</span>
+                      </>
+                    )}
                   </button>
 
                   <button
                     onClick={handleExportPdf}
                     disabled={isExportingPdf}
-                    className="flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 px-4 rounded-lg text-xs font-medium border border-slate-700 transition-colors disabled:opacity-50"
+                    className="flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 px-4 rounded-xl text-xs font-medium border border-slate-700 transition-all active:scale-95 disabled:opacity-50 shadow-sm"
                   >
-                    <Download className="w-3.5 h-3.5 text-blue-400" />
-                    <span>{isExportingPdf ? 'Exporting...' : 'Export Report (PDF)'}</span>
+                    {isExportingPdf ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                        <span>Exporting PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Export Report (PDF)</span>
+                      </>
+                    )}
                   </button>
                 </div>
+
               </div>
             )}
           </div>
